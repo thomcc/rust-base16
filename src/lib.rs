@@ -56,13 +56,16 @@ fn encoded_size(source_len: usize) -> usize {
 // Unsafe since it doesn't check dst's size in release builds.
 #[inline(always)]
 unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
+    static HEX_UPPER: &'static [u8] = b"0123456789ABCDEF";
+    static HEX_LOWER: &'static [u8] = b"0123456789abcdef";
+    let lut = if cfg == EncodeLower { HEX_LOWER } else { HEX_UPPER };
     debug_assert!(dst.len() == encoded_size(src.len()));
     let mut i = 0;
     for &byte in src.iter() {
         let x = byte >> 4;
         let y = byte & 0xf;
-        let b0 = if x < 10 { b'0' + x } else { (cfg as u8) + (x - 10) };
-        let b1 = if y < 10 { b'0' + y } else { (cfg as u8) + (y - 10) };
+        let b0 = *lut.get_unchecked(x as usize);// if x < 10 { b'0' + x } else { (cfg as u8) + (x - 10) };
+        let b1 = *lut.get_unchecked(y as usize);// if y < 10 { b'0' + y } else { (cfg as u8) + (y - 10) };
         *dst.get_unchecked_mut(i + 0) = b0;
         *dst.get_unchecked_mut(i + 1) = b1;
         i += 2;
