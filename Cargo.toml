@@ -1,0 +1,6 @@
+[package]
+name = "base16"
+version = "0.1.0"
+authors = ["Thom Chiovoloni <tchiovoloni@mozilla.com>"]
+
+[dependencies]
