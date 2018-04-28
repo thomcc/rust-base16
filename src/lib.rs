@@ -1,4 +1,3 @@
-
 //! This is a base16 (e.g. hexadecimal) encoding and decoding library with
 //! an emphasis on performance. The API is very similar and inspired by
 //! the base64 crate's API, however it's less complex (base16 is much more
@@ -14,6 +13,10 @@
 //! | `encode_config_slice`          | Writes to provided `&[u8]`   | Never                   |
 //!
 //! # Decoding
+//!
+//! Note that there are no config options (In the future one might be added
+//! to restrict the input character set, but it's not clear to me that this is
+//! useful).
 //!
 //! | Function        | Output                        | Allocates               |
 //! | --------------- | ----------------------------- | ----------------------- |
@@ -444,7 +447,7 @@ mod test {
     ];
 
     #[test]
-    fn test_exhaustive_bytes() {
+    fn test_exhaustive_bytes_encode() {
         for i in 0..256 {
             assert_eq!(&encode_lower(&[i as u8]), ALL_LOWER[i]);
             assert_eq!(&encode_upper(&[i as u8]), ALL_UPPER[i]);
@@ -452,10 +455,41 @@ mod test {
     }
 
     #[test]
+    fn test_exhaustive_bytes_decode() {
+        for i in 0..16 {
+            for j in 0..16 {
+                let all_cases = format!("{0:x}{1:x}{0:x}{1:X}{0:X}{1:x}{0:X}{1:X}", i, j);
+                let byte = i * 16 + j;
+                let expect = &[byte, byte, byte, byte];
+                assert_eq!(&decode(&all_cases).unwrap(), expect,
+                           "Failed for {}", all_cases);
+            }
+        }
+        for b in 0..256 {
+            let i = b as u8;
+            let expected = match i {
+                b'0' | b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' => Ok(vec![i - b'0']),
+                b'a' | b'b' | b'c' | b'd' | b'e' | b'f' => Ok(vec![i - b'a' + 10]),
+                b'A' | b'B' | b'C' | b'D' | b'E' | b'F' => Ok(vec![i - b'A' + 10]),
+                _ => Err(DecodeError::InvalidByte { byte: i, index: 1 })
+            };
+            assert_eq!(decode(&[b'0', i]), expected);
+        }
+    }
+
+    #[test]
     #[should_panic]
-    fn test_panic_slice() {
-        let mut slice = [0u8; 10];
-        encode_config_slice(b"abcdef", EncodeLower, &mut slice);
+    fn test_panic_slice_encode() {
+        let mut slice = [0u8; 8];
+        encode_config_slice(b"Yuasa", EncodeLower, &mut slice);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_panic_slice_decode() {
+        let mut slice = [0u8; 32];
+        let input = b"4920646f6e277420636172652074686174206d7563682061626f757420504d4d4d20544248";
+        let _ignore = decode_slice(&input[..], &mut slice);
     }
 
     #[test]
@@ -482,6 +516,6 @@ mod test {
         assert_eq!(buf, orig);
     }
 
-
+    // Most functions are tested in examples, coverage should be good now.
 }
 
