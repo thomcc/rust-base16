@@ -1,4 +1,29 @@
+
+//! This is a base16 (e.g. hexadecimal) encoding and decoding library with
+//! an emphasis on performance. The API is very similar and inspired by
+//! the base64 crate's API, however it's less complex (base16 is much more
+//! simple than base64).
+//!
+//! # Encoding
+//!
+//! | Function                       | Output                       | Allocates               |
+//! | ------------------------------ | ---------------------------- | ----------------------- |
+//! | `encode_upper`, `encode_lower` | Returns a new `String`       | Always                  |
+//! | `encode_config`                | Returns a new `String`       | Always                  |
+//! | `encode_config_buf`            | Appends to provided `String` | If buffer needs to grow |
+//! | `encode_config_slice`          | Writes to provided `&[u8]`   | Never                   |
+//!
+//! # Decoding
+//!
+//! | Function        | Output                        | Allocates               |
+//! | --------------- | ----------------------------- | ----------------------- |
+//! | `decode`        | Returns a new `Vec<u8>`       | Always                  |
+//! | `decode_buf`    | Appends to provided `Vec<u8>` | If buffer needs to grow |
+//! | `decode_slice`  | Writes to provided `&[u8]`    | Never                   |
+//!
+
 use std::{mem, fmt, error};
+
 /// Configuration options for encoding. Just specifies whether or not output
 /// should be uppercase or lowercase.
 #[repr(u8)]
@@ -56,12 +81,6 @@ unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) {
     v.set_len(new_len);
 }
 
-#[inline(always)]
-unsafe fn resize_vec_uninitialized(v: &mut Vec<u8>, size: usize) {
-    v.set_len(0);
-    grow_vec_uninitialized(v, size);
-}
-
 /// Encode bytes as base16, using lower case characters for nibbles between
 /// 10 and 15 (`a` through `f`).
 ///
@@ -110,32 +129,6 @@ pub fn encode_config<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig) -> Stri
     encode_to_string(input.as_ref(), cfg)
 }
 
-/// Encode `input` into the provided buffer, which is resized to fit the encoded
-/// string. Only allocates if `dst`'s capacity is insufficient to fit the
-/// result.
-///
-/// # Example
-///
-/// ```
-/// let mut result = String::new();
-/// base16::encode_config_buf(b"Madoka", base16::EncodeLower, &mut result);
-/// assert_eq!(result, "4d61646f6b61");
-///
-/// // Note that the new input replaces the old -- it is not appended
-/// base16::encode_config_buf(b"Homura", base16::EncodeUpper, &mut result);
-/// assert_eq!(result, "486F6D757261");
-/// ```
-#[inline]
-pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig, dst: &mut String) {
-    let src = input.as_ref();
-    unsafe {
-        let mut dst_bytes = dst.as_mut_vec();
-        resize_vec_uninitialized(&mut dst_bytes, encoded_size(src.len()));
-        encode_slice(src, cfg, &mut dst_bytes);
-    }
-}
-
-
 /// Encode `input` into the end of the provided buffer. Returns the number of
 /// bytes that were written.
 ///
@@ -147,17 +140,17 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig, dst
 /// let messages = &["Taako, ", "Merle, ", "Magnus"];
 /// let mut buffer = String::new();
 /// for msg in messages {
-///     let bytes_written = base16::encode_config_append(msg.as_bytes(),
-///                                                      base16::EncodeUpper,
-///                                                      &mut buffer);
+///     let bytes_written = base16::encode_config_buf(msg.as_bytes(),
+///                                                   base16::EncodeUpper,
+///                                                   &mut buffer);
 ///     assert_eq!(bytes_written, msg.len() * 2);
 /// }
 /// assert_eq!(buffer, "5461616B6F2C204D65726C652C204D61676E7573");
 /// ```
 #[inline]
-pub fn encode_config_append<T: ?Sized + AsRef<[u8]>>(input: &T,
-                                                     cfg: EncConfig,
-                                                     dst: &mut String) -> usize {
+pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
+                                                  cfg: EncConfig,
+                                                  dst: &mut String) -> usize {
     let src = input.as_ref();
     let bytes_to_write = encoded_size(src.len());
     unsafe {
@@ -181,7 +174,7 @@ pub fn encode_config_append<T: ?Sized + AsRef<[u8]>>(input: &T,
 /// # Example
 ///
 /// ```
-/// // Writing to a statically allocated buffer
+/// // Writing to a statically sized buffer on the stack.
 /// let message = b"Wu-Tang Killa Bees";
 /// let mut buffer = [0u8; 1024];
 ///
@@ -322,52 +315,23 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
     }
 }
 
-/// Decode bytes from base16, and write into the provided buffer. Only allocates
-/// if the buffer could not fit the data. Returns the number of bytes written.
-///
-/// In the case of an error, the buffer will remain empty.
-///
-/// # Example
-///
-/// ```
-/// let msg = "476f6f642072757374206c6962726172696573207573652073696c6c79206578616d706c6573";
-/// let mut buf = Vec::new();
-/// assert_eq!(base16::decode_buf(&msg[..], &mut buf).unwrap(), 38);
-/// assert_eq!(buf, b"Good rust libraries use silly examples".to_vec());
-///
-/// let msg2 = b"416E6420616E696D65207265666572656e636573";
-/// assert_eq!(base16::decode_buf(&msg2[..], &mut buf).unwrap(), 20);
-/// assert_eq!(buf, b"And anime references".to_vec());
-/// ```
-#[inline]
-pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result<usize, DecodeError> {
-    let src = input.as_ref();
-    if (src.len() & 1) != 0 {
-        v.truncate(0);
-        return Err(DecodeError::InvalidLength { length: src.len() });
-    }
-    let need_size = src.len() >> 1;
-    let res = unsafe {
-        resize_vec_uninitialized(v, need_size);
-        decode_slice_raw(src, v)
-    };
-    match res {
-        Ok(()) => Ok(need_size),
-        Err(index) => {
-            // Important not to expose uninitialized memory
-            v.truncate(0);
-            Err(DecodeError::InvalidByte { index, byte: src[index] })
-        }
-    }
-}
 
 /// Decode bytes from base16, and appends into the provided buffer. Only
 /// allocates if the buffer could not fit the data. Returns the number of bytes
 /// written.
 ///
 /// In the case of an error, the buffer should remain the same size.
+///
+/// # Example
+///
+/// ```
+/// let mut result = Vec::new();
+/// assert_eq!(base16::decode_buf(b"4d61646f6b61", &mut result).unwrap(), 6);
+/// assert_eq!(base16::decode_buf(b"486F6D757261", &mut result).unwrap(), 6);
+/// assert_eq!(String::from_utf8(result).unwrap(), "MadokaHomura");
+/// ```
 #[inline]
-pub fn decode_append<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result<usize, DecodeError> {
+pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result<usize, DecodeError> {
     let src = input.as_ref();
     if (src.len() & 1) != 0 {
         return Err(DecodeError::InvalidLength { length: src.len() });
@@ -398,6 +362,17 @@ pub fn decode_append<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Res
 ///
 /// Panics if the provided buffer is not large enough for the input.
 ///
+/// # Example
+/// ```
+/// let msg = "476f6f642072757374206c6962726172696573207573652073696c6c79206578616d706c6573";
+/// let mut buf = [0u8; 1024];
+/// assert_eq!(base16::decode_slice(&msg[..], &mut buf).unwrap(), 38);
+/// assert_eq!(&buf[..38], b"Good rust libraries use silly examples".as_ref());
+///
+/// let msg2 = b"2E20416C736F2C20616E696D65207265666572656e636573";
+/// assert_eq!(base16::decode_slice(&msg2[..], &mut buf[38..]).unwrap(), 24);
+/// assert_eq!(&buf[38..62], b". Also, anime references".as_ref());
+/// ```
 #[inline]
 pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Result<usize, DecodeError> {
     let src = input.as_ref();
@@ -493,28 +468,16 @@ mod test {
 
     #[test]
     fn test_decode_errors() {
-        let mut buf = Vec::new();
-        buf.resize(100, 0xff);
-        assert_eq!(decode_buf(b"6d61646f686f6d75!!", &mut buf),
-                   Err(DecodeError::InvalidByte { byte: b'!', index: 16 }));
-        assert_eq!(buf.len(), 0);
-
-        buf.resize(100, 0xff);
-        assert_eq!(decode_buf(b"abc", &mut buf),
-                   Err(DecodeError::InvalidLength { length: 3 }));
-        assert_eq!(buf.len(), 0);
-
-
-        buf = decode(b"686f6d61646f6b61").unwrap();
+        let mut buf = decode(b"686f6d61646f6b61").unwrap();
         let orig = buf.clone();
 
         assert_eq!(buf.len(), 8);
 
-        assert_eq!(decode_append(b"abc", &mut buf),
+        assert_eq!(decode_buf(b"abc", &mut buf),
                    Err(DecodeError::InvalidLength { length: 3 }));
         assert_eq!(buf, orig);
 
-        assert_eq!(decode_append(b"6d61646f686f6d75g_", &mut buf),
+        assert_eq!(decode_buf(b"6d61646f686f6d75g_", &mut buf),
                    Err(DecodeError::InvalidByte { byte: b'g', index: 16 }));
         assert_eq!(buf, orig);
     }
