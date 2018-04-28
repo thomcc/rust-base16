@@ -5,6 +5,9 @@
 //!
 //! # Encoding
 //!
+//! The config options at the moment are limited to the output case (upper vs
+//! lower).
+//!
 //! | Function                       | Output                       | Allocates               |
 //! | ------------------------------ | ---------------------------- | ----------------------- |
 //! | `encode_upper`, `encode_lower` | Returns a new `String`       | Always                  |
@@ -24,6 +27,8 @@
 //! | `decode_buf`    | Appends to provided `Vec<u8>` | If buffer needs to grow |
 //! | `decode_slice`  | Writes to provided `&[u8]`    | Never                   |
 //!
+
+#![deny(missing_docs)]
 
 use std::{mem, fmt, error};
 
@@ -216,9 +221,17 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DecodeError {
     /// An invalid byte was found in the input (bytes must be `[0-9a-fA-F]`)
-    InvalidByte { index: usize, byte: u8 },
+    InvalidByte {
+        /// The index at which the problematic byte was found.
+        index: usize,
+        /// The byte that we cannot decode.
+        byte: u8
+    },
     /// The length of the input not a multiple of two
-    InvalidLength { length: usize },
+    InvalidLength {
+        /// The input length.
+        length: usize
+    },
 }
 
 impl fmt::Display for DecodeError {
