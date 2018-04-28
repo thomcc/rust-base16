@@ -38,9 +38,9 @@ use std::{mem, fmt, error};
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum EncConfig {
     /// Encode using lower case characters for hex values >= 10
-    EncodeLower = b'a',
+    EncodeLower,
     /// Encode using upper case characters for hex values >= 10
-    EncodeUpper = b'A',
+    EncodeUpper,
 }
 
 pub use EncConfig::*;
@@ -64,8 +64,8 @@ unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
     for &byte in src.iter() {
         let x = byte >> 4;
         let y = byte & 0xf;
-        let b0 = *lut.get_unchecked(x as usize);// if x < 10 { b'0' + x } else { (cfg as u8) + (x - 10) };
-        let b1 = *lut.get_unchecked(y as usize);// if y < 10 { b'0' + y } else { (cfg as u8) + (y - 10) };
+        let b0 = *lut.get_unchecked(x as usize);
+        let b1 = *lut.get_unchecked(y as usize);
         *dst.get_unchecked_mut(i + 0) = b0;
         *dst.get_unchecked_mut(i + 1) = b1;
         i += 2;
