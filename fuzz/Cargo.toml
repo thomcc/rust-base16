@@ -1,0 +1,33 @@
+
+[package]
+name = "base16-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+rand = "0.3.15"
+[dependencies.base16]
+path = ".."
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "roundtrip_l"
+path = "fuzz_targets/roundtrip_l.rs"
+
+[[bin]]
+name = "roundtrip_u"
+path = "fuzz_targets/roundtrip_u.rs"
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+
