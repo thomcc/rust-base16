@@ -27,6 +27,20 @@
 //! | `decode_buf`    | Appends to provided `Vec<u8>` | If buffer needs to grow |
 //! | `decode_slice`  | Writes to provided `&[u8]`    | Never                   |
 //!
+//! # Example
+//!
+//! ```
+//! extern crate base16;
+//!
+//! fn main() {
+//!     let original_msg = "Taako the wizard";
+//!     let hex_string = base16::encode_lower(original_msg);
+//!     assert_eq!(hex_string, "5461616b6f207468652077697a617264");
+//!     let decoded = base16::decode(&hex_string).unwrap();
+//!     assert_eq!(String::from_utf8(decoded).unwrap(), original_msg);
+//! }
+//! ```
+//!
 
 #![deny(missing_docs)]
 
