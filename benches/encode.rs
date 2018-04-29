@@ -7,7 +7,7 @@ extern crate test;
 use rand::Rng;
 
 #[inline]
-fn rand_enc_cfg<R: rand::Rng>(rng: &mut R) -> base16::EncConfig {
+fn rand_enc_cfg<R: Rng>(rng: &mut R) -> base16::EncConfig {
     if rng.gen::<bool>() {
         base16::EncodeUpper
     } else {
@@ -43,7 +43,7 @@ fn do_bench_encode_buf(b: &mut test::Bencher,
         let result = testfn(test::black_box(&bytes),
                             test::black_box(cfg),
                             test::black_box(&mut buf));
-        test::black_box(result);
+        test::black_box(result)
     });
 }
 

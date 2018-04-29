@@ -34,7 +34,6 @@ use std::{mem, fmt, error};
 
 /// Configuration options for encoding. Just specifies whether or not output
 /// should be uppercase or lowercase.
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum EncConfig {
     /// Encode using lower case characters for hex values >= 10
@@ -220,6 +219,56 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
     need_size
 }
 
+/// Encode a single character as hex, returning a tuple containing the two
+/// encoded bytes in big-endian order -- the order the characters would be in
+/// when written out (e.g. the top nibble is the first item in the tuple)
+///
+/// # Example
+/// ```
+/// assert_eq!(base16::encode_byte(0xff, base16::EncodeLower), (b'f', b'f'));
+/// assert_eq!(base16::encode_byte(0xa0, base16::EncodeUpper), (b'A', b'0'));
+/// assert_eq!(base16::encode_byte(3, base16::EncodeUpper), (b'0', b'3'));
+/// ```
+#[inline]
+pub fn encode_byte(byte: u8, cfg: EncConfig) -> (u8, u8) {
+    static HEX_UPPER: &'static [u8] = b"0123456789ABCDEF";
+    static HEX_LOWER: &'static [u8] = b"0123456789abcdef";
+    let lut = if cfg == EncodeLower { HEX_LOWER } else { HEX_UPPER };
+    let lo = unsafe { *lut.get_unchecked((byte & 15) as usize) };
+    let hi = unsafe { *lut.get_unchecked((byte >> 4) as usize) };
+    (hi, lo)
+}
+
+/// Convenience wrapper for `base16::encode_byte(byte, base16::EncodeLower)`
+///
+/// See also `base16::encode_byte_u`.
+///
+/// # Example
+/// ```
+/// assert_eq!(base16::encode_byte_l(0xff), (b'f', b'f'));
+/// assert_eq!(base16::encode_byte_l(30), (b'1', b'e'));
+/// assert_eq!(base16::encode_byte_l(0x2d), (b'2', b'd'));
+/// ```
+#[inline]
+pub fn encode_byte_l(byte: u8) -> (u8, u8) {
+    encode_byte(byte, EncodeLower)
+}
+
+/// Convenience wrapper for `base16::encode_byte(byte, base16::EncodeUpper)`
+///
+/// See also `base16::encode_byte_l`.
+///
+/// # Example
+/// ```
+/// assert_eq!(base16::encode_byte_u(0xff), (b'F', b'F'));
+/// assert_eq!(base16::encode_byte_u(30), (b'1', b'E'));
+/// assert_eq!(base16::encode_byte_u(0x2d), (b'2', b'D'));
+/// ```
+#[inline]
+pub fn encode_byte_u(byte: u8) -> (u8, u8) {
+    encode_byte(byte, EncodeUpper)
+}
+
 /// Represents a problem with the data we want to decode.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DecodeError {
@@ -264,7 +313,8 @@ impl error::Error for DecodeError {
     }
 }
 
-unsafe fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
+#[inline]
+unsafe fn do_decode_slice_raw(src: &[u8], dst: &mut[u8]) -> isize {
     static LUT: [i8; 256] = [
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -288,17 +338,36 @@ unsafe fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
     let mut di = 0;
     while si < src.len() {
         let s0 = *src.get_unchecked(si);
-        let s1 = *src.get_unchecked(si + 1);
+        let s1 = *src.get_unchecked(si.wrapping_add(1));
         let r0 = *LUT.get_unchecked(s0 as usize);
         let r1 = *LUT.get_unchecked(s1 as usize);
-        if (r0 | r1) < 0 {
-            return Err(if r0 < 0 { si } else { si + 1 });
+        if (r0 | r1) >= 0 {
+            *dst.get_unchecked_mut(di) = ((r0 << 4) | r1) as u8;
+            si = si.wrapping_add(2);
+            di = di.wrapping_add(1);
+        } else {
+            // This is annoying (but resulted in a 20% speed boost), but we
+            // return the earliest byte that can be the problem byte, and sort
+            // it out in the caller.
+            return si as isize;
         }
-        *dst.get_unchecked_mut(di) = ((r0 << 4) | r1) as u8;
-        si += 2;
-        di += 1;
     }
-    Ok(())
+    -1
+}
+
+#[inline]
+unsafe fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
+    let bad_idx = do_decode_slice_raw(src, dst);
+    if bad_idx < 0 {
+        return Ok(());
+    }
+    let idx = bad_idx as usize;
+    let b0 = src[idx];
+    if decode_byte(b0).is_none() {
+        Err(idx)
+    } else {
+        Err(idx + 1)
+    }
 }
 
 /// Decode bytes from base16, and return a new `Vec<u8>` containing the results.
@@ -409,9 +478,35 @@ pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Resul
     }
 }
 
+/// Decode a single character as hex.
+///
+/// Returns `None` for values outside the ASCII hex range.
+///
+/// # Example
+/// ```
+/// assert_eq!(base16::decode_byte(b'a'), Some(10));
+/// assert_eq!(base16::decode_byte(b'B'), Some(11));
+/// assert_eq!(base16::decode_byte(b'0'), Some(0));
+/// assert_eq!(base16::decode_byte(b'q'), None);
+/// assert_eq!(base16::decode_byte(b'x'), None);
+/// ```
+#[inline]
+pub fn decode_byte(c: u8) -> Option<u8> {
+    if c.wrapping_sub(b'0') <= 9 {
+        Some(c.wrapping_sub(b'0'))
+    } else if c.wrapping_sub(b'a') < 6 {
+        Some(c.wrapping_sub(b'a') + 10)
+    } else if c.wrapping_sub(b'A') < 6 {
+        Some(c.wrapping_sub(b'A') + 10)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::collections::HashMap;
     static ALL_LOWER: &'static[&'static str] = &[
         "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0a", "0b",
         "0c", "0d", "0e", "0f", "10", "11", "12", "13", "14", "15", "16", "17",
@@ -530,6 +625,42 @@ mod test {
         assert_eq!(decode_buf(b"6d61646f686f6d75g_", &mut buf),
                    Err(DecodeError::InvalidByte { byte: b'g', index: 16 }));
         assert_eq!(buf, orig);
+    }
+
+    #[test]
+    fn test_encode_byte() {
+        for i in 0..256 {
+            let byte = i as u8;
+            let su = ALL_UPPER[byte as usize].as_bytes();
+            let sl = ALL_LOWER[byte as usize].as_bytes();
+            let tu = encode_byte(byte, EncodeUpper);
+            let tl = encode_byte(byte, EncodeLower);
+
+            assert_eq!(tu.0, su[0]);
+            assert_eq!(tu.1, su[1]);
+
+            assert_eq!(tl.0, sl[0]);
+            assert_eq!(tl.1, sl[1]);
+
+            assert_eq!(tu, encode_byte_u(byte));
+            assert_eq!(tl, encode_byte_l(byte));
+        }
+    }
+    static HEX_TO_VALUE: &'static[(u8, u8)] = &[
+        (b'0', 0x0), (b'1', 0x1), (b'2', 0x2), (b'3', 0x3), (b'4', 0x4),
+        (b'5', 0x5), (b'6', 0x6), (b'7', 0x7), (b'8', 0x8), (b'9', 0x9),
+        (b'a', 0xa), (b'b', 0xb), (b'c', 0xc), (b'd', 0xd), (b'e', 0xe), (b'f', 0xf),
+        (b'A', 0xA), (b'B', 0xB), (b'C', 0xC), (b'D', 0xD), (b'E', 0xE), (b'F', 0xF),
+    ];
+
+    #[test]
+    fn test_decode_byte() {
+        let expected = HEX_TO_VALUE.iter().cloned().collect::<HashMap<u8, u8>>();
+        for i in 0..256 {
+            let byte = i as u8;
+            let want = expected.get(&byte).cloned();
+            assert_eq!(decode_byte(byte), want);
+        }
     }
 
     // Most functions are tested in examples, coverage should be good now.

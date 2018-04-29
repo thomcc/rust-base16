@@ -6,7 +6,7 @@ extern crate test;
 
 use rand::Rng;
 
-fn rand_hex_string<R: rand::Rng>(rng: &mut R, size: usize) -> String {
+fn rand_hex_string<R: Rng>(rng: &mut R, size: usize) -> String {
     assert!((size & 1) == 0);
     let mut s = String::with_capacity(size);
     let chars: &[u8] = b"0123456789abcdefABCDEF";
