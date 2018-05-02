@@ -2,7 +2,7 @@
 name = "base16"
 version = "0.1.0"
 authors = ["Thom Chiovoloni <tchiovoloni@mozilla.com>"]
-keywords = ["hex", "hexadecimal", "base16", "b16", "encode", "decode"]
+keywords = ["hex", "hexadecimal", "base16", "encode", "decode"]
 description = "base16 (hex) encoding and decoding"
 categories = ["encoding"]
 license = "MIT/Apache-2.0"
