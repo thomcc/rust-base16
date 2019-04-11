@@ -22,7 +22,13 @@ fn main() {
 }
 ```
 
-More usage examples in the docs (every function should have a usage example now).
+More usage examples in the [docs](https://docs.rs/base16).
+
+## `no_std` Usage
+
+As of 0.1.2, this crate by default has the `std` feature enabled, however, it
+may be turned off, allowing it to be used in no_std envionments. Not all
+functions are available without the stdlib, but each function should document whether or not it is.
 
 # License
 

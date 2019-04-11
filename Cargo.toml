@@ -1,6 +1,6 @@
 [package]
 name = "base16"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Thom Chiovoloni <tchiovoloni@mozilla.com>"]
 keywords = ["hex", "base16", "encode", "decode", "no_std"]
 repository = "https://github.com/thomcc/rust-base16"
