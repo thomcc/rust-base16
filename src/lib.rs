@@ -49,8 +49,9 @@ pub use EncConfig::*;
 #[inline(always)]
 fn encoded_size(source_len: usize) -> usize {
     const USIZE_TOP_BIT: usize = 1usize << (std::mem::size_of::<usize>() * 8 - 1);
-    assert!((source_len & USIZE_TOP_BIT) == 0,
-            "usize overflow when computing size of destination ({} < {})");
+    if (source_len & USIZE_TOP_BIT) != 0 {
+        usize_overflow(source_len)
+    }
     source_len << 1
 }
 
@@ -236,9 +237,9 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
                                                     dst: &mut [u8]) -> usize {
     let src = input.as_ref();
     let need_size = encoded_size(src.len());
-    assert!(dst.len() >= need_size,
-            "Destination is not large enough to encode input: {} < {}",
-            dst.len(), need_size);
+    if dst.len() < need_size {
+        dest_too_small_enc(dst.len(), need_size);
+    }
     unsafe {
         encode_slice(src, cfg, dst.get_unchecked_mut(..need_size));
     }
@@ -324,6 +325,16 @@ pub enum DecodeError {
     },
 }
 
+#[cold]
+fn invalid_length(length: usize) -> DecodeError {
+    DecodeError::InvalidLength { length }
+}
+
+#[cold]
+fn invalid_byte(index: usize, src: &[u8]) -> DecodeError {
+    DecodeError::InvalidByte { index, byte: src[index] }
+}
+
 impl std::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
@@ -398,14 +409,20 @@ unsafe fn do_decode_slice_raw(src: &[u8], dst: &mut[u8]) -> isize {
 unsafe fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
     let bad_idx = do_decode_slice_raw(src, dst);
     if bad_idx < 0 {
-        return Ok(());
+        Ok(())
+    } else {
+        Err(raw_decode_err(bad_idx as usize, src))
     }
-    let idx = bad_idx as usize;
+}
+
+#[cold]
+#[inline(never)]
+fn raw_decode_err(idx: usize, src: &[u8]) -> usize {
     let b0 = src[idx];
     if decode_byte(b0).is_none() {
-        Err(idx)
+        idx
     } else {
-        Err(idx + 1)
+        idx + 1
     }
 }
 
@@ -432,7 +449,7 @@ unsafe fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
 pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError> {
     let src = input.as_ref();
     if (src.len() & 1) != 0 {
-        return Err(DecodeError::InvalidLength { length: src.len() });
+        return Err(invalid_length(src.len()));
     }
     let need_size = src.len() >> 1;
     let mut dst = Vec::with_capacity(need_size);
@@ -442,7 +459,7 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
     };
     match res {
         Ok(()) => Ok(dst),
-        Err(index) => Err(DecodeError::InvalidByte { index, byte: src[index] })
+        Err(index) => Err(invalid_byte(index, src))
     }
 }
 
@@ -469,7 +486,7 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
 pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result<usize, DecodeError> {
     let src = input.as_ref();
     if (src.len() & 1) != 0 {
-        return Err(DecodeError::InvalidLength { length: src.len() });
+        return Err(invalid_length(src.len()));
     }
     let need_size = src.len() >> 1;
     let current_size = v.len();
@@ -481,7 +498,7 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
         Ok(()) => Ok(need_size),
         Err(index) => {
             v.truncate(current_size);
-            Err(DecodeError::InvalidByte { index, byte: src[index] })
+            Err(invalid_byte(index, src))
         }
     }
 }
@@ -515,16 +532,16 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
 pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Result<usize, DecodeError> {
     let src = input.as_ref();
     if (src.len() & 1) != 0 {
-        return Err(DecodeError::InvalidLength { length: src.len() });
+        return Err(invalid_length(src.len()));
     }
     let need_size = src.len() >> 1;
-    assert!(out.len() >= need_size,
-            "Destination buffer not large enough for decoded input {} < {}",
-            out.len(), need_size);
+    if out.len() < need_size {
+        dest_too_small_dec(out.len(), need_size);
+    }
     let res = unsafe { decode_slice_raw(src, &mut out[..need_size]) };
     match res {
         Ok(()) => Ok(need_size),
-        Err(index) => Err(DecodeError::InvalidByte { index, byte: src[index] })
+        Err(index) => Err(invalid_byte(index, src))
     }
 }
 
@@ -554,6 +571,25 @@ pub fn decode_byte(c: u8) -> Option<u8> {
     } else {
         None
     }
+}
+
+// Outlined assertions.
+#[inline(never)]
+#[cold]
+fn usize_overflow(len: usize) -> ! {
+    panic!("usize overflow when computing size of destination: {}", len);
+}
+
+#[cold]
+#[inline(never)]
+fn dest_too_small_enc(dst_len: usize, need_size: usize) -> ! {
+    panic!("Destination is not large enough to encode input: {} < {}", dst_len, need_size);
+}
+
+#[cold]
+#[inline(never)]
+fn dest_too_small_dec(dst_len: usize, need_size: usize) -> ! {
+    panic!("Destination buffer not large enough for decoded input {} < {}", dst_len, need_size);
 }
 
 #[cfg(test)]
