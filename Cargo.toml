@@ -2,10 +2,10 @@
 name = "base16"
 version = "0.1.1"
 authors = ["Thom Chiovoloni <tchiovoloni@mozilla.com>"]
-keywords = ["hex", "hexadecimal", "base16", "encode", "decode"]
+keywords = ["hex", "base16", "encode", "decode", "no_std"]
 repository = "https://github.com/thomcc/rust-base16"
 description = "base16 (hex) encoding and decoding"
-categories = ["encoding"]
+categories = ["encoding", "no-std"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 edition = "2018"
@@ -17,7 +17,12 @@ default = ["std"]
 [dependencies]
 
 [dev-dependencies]
-rand = "0.4"
+rand = "0.6.5"
+criterion = "0.2.11"
+
+[[bench]]
+name = "bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true
