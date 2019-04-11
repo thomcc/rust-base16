@@ -27,24 +27,12 @@
 //! | `decode_buf`    | Appends to provided `Vec<u8>` | If buffer needs to grow |
 //! | `decode_slice`  | Writes to provided `&[u8]`    | Never                   |
 //!
-//! # Example
-//!
-//! ```
-//! extern crate base16;
-//!
-//! fn main() {
-//!     let original_msg = "Taako the wizard";
-//!     let hex_string = base16::encode_lower(original_msg);
-//!     assert_eq!(hex_string, "5461616b6f207468652077697a617264");
-//!     let decoded = base16::decode(&hex_string).unwrap();
-//!     assert_eq!(String::from_utf8(decoded).unwrap(), original_msg);
-//! }
-//! ```
-//!
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 
-use std::{mem, fmt, error};
+#[cfg(not(feature = "std"))]
+extern crate core as std;
 
 /// Configuration options for encoding. Just specifies whether or not output
 /// should be uppercase or lowercase.
@@ -60,7 +48,7 @@ pub use EncConfig::*;
 
 #[inline(always)]
 fn encoded_size(source_len: usize) -> usize {
-    const USIZE_TOP_BIT: usize = 1usize << (mem::size_of::<usize>() * 8 - 1);
+    const USIZE_TOP_BIT: usize = 1usize << (std::mem::size_of::<usize>() * 8 - 1);
     assert!((source_len & USIZE_TOP_BIT) == 0,
             "usize overflow when computing size of destination ({} < {})");
     source_len << 1
@@ -85,6 +73,7 @@ unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
     }
 }
 
+#[cfg(feature = "std")]
 #[inline(always)]
 fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     let size = encoded_size(bytes.len());
@@ -97,6 +86,7 @@ fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     result
 }
 
+#[cfg(feature = "std")]
 #[inline(always)]
 unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) {
     v.reserve(grow_by);
@@ -116,6 +106,11 @@ unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) {
 /// assert_eq!(base16::encode_lower(b"Hello World"), "48656c6c6f20576f726c64");
 /// assert_eq!(base16::encode_lower(&[0xff, 0xcc, 0xaa]), "ffccaa");
 /// ```
+///
+/// # Availability
+///
+/// This function is only available when the `std` feature is enabled.
+#[cfg(feature = "std")]
 #[inline]
 pub fn encode_lower<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
     encode_to_string(input.as_ref(), EncodeLower)
@@ -132,6 +127,11 @@ pub fn encode_lower<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
 /// assert_eq!(base16::encode_upper(b"Hello World"), "48656C6C6F20576F726C64");
 /// assert_eq!(base16::encode_upper(&[0xff, 0xcc, 0xaa]), "FFCCAA");
 /// ```
+///
+/// # Availability
+///
+/// This function is only available when the `std` feature is enabled.
+#[cfg(feature = "std")]
 #[inline]
 pub fn encode_upper<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
     encode_to_string(input.as_ref(), EncodeUpper)
@@ -148,6 +148,11 @@ pub fn encode_upper<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
 /// assert_eq!(base16::encode_config(&data, base16::EncodeLower), "010203aabbcc");
 /// assert_eq!(base16::encode_config(&data, base16::EncodeUpper), "010203AABBCC");
 /// ```
+///
+/// # Availability
+///
+/// This function is only available when the `std` feature is enabled.
+#[cfg(feature = "std")]
 #[inline]
 pub fn encode_config<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig) -> String {
     encode_to_string(input.as_ref(), cfg)
@@ -171,6 +176,10 @@ pub fn encode_config<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig) -> Stri
 /// }
 /// assert_eq!(buffer, "5461616B6F2C204D65726C652C204D61676E7573");
 /// ```
+/// # Availability
+///
+/// This function is only available when the `std` feature is enabled.
+#[cfg(feature = "std")]
 #[inline]
 pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
                                                   cfg: EncConfig,
@@ -218,6 +227,9 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
 /// assert_eq!(String::from_utf8(buffer[..write_end].into()).unwrap(),
 ///            "57752d54616e67204b696c6c6120426565733a2054686520537761726d");
 /// ```
+/// # Availability
+///
+/// This function is available whether or not the `std` feature is enabled.
 #[inline]
 pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
                                                     cfg: EncConfig,
@@ -243,6 +255,9 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
 /// assert_eq!(base16::encode_byte(0xa0, base16::EncodeUpper), (b'A', b'0'));
 /// assert_eq!(base16::encode_byte(3, base16::EncodeUpper), (b'0', b'3'));
 /// ```
+/// # Availability
+///
+/// This function is available whether or not the `std` feature is enabled.
 #[inline]
 pub fn encode_byte(byte: u8, cfg: EncConfig) -> (u8, u8) {
     static HEX_UPPER: &'static [u8] = b"0123456789ABCDEF";
@@ -263,6 +278,9 @@ pub fn encode_byte(byte: u8, cfg: EncConfig) -> (u8, u8) {
 /// assert_eq!(base16::encode_byte_l(30), (b'1', b'e'));
 /// assert_eq!(base16::encode_byte_l(0x2d), (b'2', b'd'));
 /// ```
+/// # Availability
+///
+/// This function is available whether or not the `std` feature is enabled.
 #[inline]
 pub fn encode_byte_l(byte: u8) -> (u8, u8) {
     encode_byte(byte, EncodeLower)
@@ -278,12 +296,18 @@ pub fn encode_byte_l(byte: u8) -> (u8, u8) {
 /// assert_eq!(base16::encode_byte_u(30), (b'1', b'E'));
 /// assert_eq!(base16::encode_byte_u(0x2d), (b'2', b'D'));
 /// ```
+/// # Availability
+///
+/// This function is available whether or not the `std` feature is enabled.
 #[inline]
 pub fn encode_byte_u(byte: u8) -> (u8, u8) {
     encode_byte(byte, EncodeUpper)
 }
 
 /// Represents a problem with the data we want to decode.
+///
+/// This implements `std::error::Error` and `std::fmt::Display` if the `std`
+/// feature is enabled, but only `std::fmt::Display` if it is not.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DecodeError {
     /// An invalid byte was found in the input (bytes must be `[0-9a-fA-F]`)
@@ -300,8 +324,8 @@ pub enum DecodeError {
     },
 }
 
-impl fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             DecodeError::InvalidByte { index, byte } => {
                 write!(f, "Invalid byte `b{:?}`, at index {}.",
@@ -314,7 +338,8 @@ impl fmt::Display for DecodeError {
     }
 }
 
-impl error::Error for DecodeError {
+#[cfg(feature = "std")]
+impl std::error::Error for DecodeError {
     fn description(&self) -> &str {
         match *self {
             DecodeError::InvalidByte { .. } => "Illegal byte in base16 data",
@@ -322,7 +347,7 @@ impl error::Error for DecodeError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn std::error::Error> {
         None
     }
 }
@@ -399,6 +424,10 @@ unsafe fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
 /// assert_eq!(base16::decode(b"a"),
 ///            Err(base16::DecodeError::InvalidLength { length: 1 }));
 /// ```
+/// # Availability
+///
+/// This function is only available when the `std` feature is enabled.
+#[cfg(feature = "std")]
 #[inline]
 pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError> {
     let src = input.as_ref();
@@ -432,6 +461,10 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
 /// assert_eq!(base16::decode_buf(b"486F6D757261", &mut result).unwrap(), 6);
 /// assert_eq!(String::from_utf8(result).unwrap(), "MadokaHomura");
 /// ```
+/// # Availability
+///
+/// This function is only available when the `std` feature is enabled.
+#[cfg(feature = "std")]
 #[inline]
 pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result<usize, DecodeError> {
     let src = input.as_ref();
@@ -475,6 +508,9 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
 /// assert_eq!(base16::decode_slice(&msg2[..], &mut buf[38..]).unwrap(), 24);
 /// assert_eq!(&buf[38..62], b". Also, anime references".as_ref());
 /// ```
+/// # Availability
+///
+/// This function is available whether or not the `std` feature is enabled.
 #[inline]
 pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Result<usize, DecodeError> {
     let src = input.as_ref();
@@ -504,6 +540,9 @@ pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Resul
 /// assert_eq!(base16::decode_byte(b'q'), None);
 /// assert_eq!(base16::decode_byte(b'x'), None);
 /// ```
+/// # Availability
+///
+/// This function is available whether or not the `std` feature is enabled.
 #[inline]
 pub fn decode_byte(c: u8) -> Option<u8> {
     if c.wrapping_sub(b'0') <= 9 {
@@ -520,8 +559,7 @@ pub fn decode_byte(c: u8) -> Option<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::collections::HashMap;
-    static ALL_LOWER: &'static[&'static str] = &[
+    const ALL_LOWER: &[&str] = &[
         "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0a", "0b",
         "0c", "0d", "0e", "0f", "10", "11", "12", "13", "14", "15", "16", "17",
         "18", "19", "1a", "1b", "1c", "1d", "1e", "1f", "20", "21", "22", "23",
@@ -546,7 +584,7 @@ mod test {
         "fc", "fd", "fe", "ff",
     ];
 
-    static ALL_UPPER: &'static[&'static str] = &[
+    const ALL_UPPER: &[&str] = &[
         "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0A", "0B",
         "0C", "0D", "0E", "0F", "10", "11", "12", "13", "14", "15", "16", "17",
         "18", "19", "1A", "1B", "1C", "1D", "1E", "1F", "20", "21", "22", "23",
@@ -571,6 +609,7 @@ mod test {
         "FC", "FD", "FE", "FF",
     ];
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_exhaustive_bytes_encode() {
         for i in 0..256 {
@@ -579,6 +618,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_exhaustive_bytes_decode() {
         for i in 0..16 {
@@ -625,6 +665,7 @@ mod test {
         assert_eq!(&slice, b"616263646566")
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_decode_errors() {
         let mut buf = decode(b"686f6d61646f6b61").unwrap();
@@ -660,7 +701,8 @@ mod test {
             assert_eq!(tl, encode_byte_l(byte));
         }
     }
-    static HEX_TO_VALUE: &'static[(u8, u8)] = &[
+
+    const HEX_TO_VALUE: &[(u8, u8)] = &[
         (b'0', 0x0), (b'1', 0x1), (b'2', 0x2), (b'3', 0x3), (b'4', 0x4),
         (b'5', 0x5), (b'6', 0x6), (b'7', 0x7), (b'8', 0x8), (b'9', 0x9),
         (b'a', 0xa), (b'b', 0xb), (b'c', 0xc), (b'd', 0xd), (b'e', 0xe), (b'f', 0xf),
@@ -669,11 +711,12 @@ mod test {
 
     #[test]
     fn test_decode_byte() {
-        let expected = HEX_TO_VALUE.iter().cloned().collect::<HashMap<u8, u8>>();
+        let mut expected = [None::<u8>; 256];
+        for &(k, v) in HEX_TO_VALUE {
+            expected[k as usize] = Some(v);
+        }
         for i in 0..256 {
-            let byte = i as u8;
-            let want = expected.get(&byte).cloned();
-            assert_eq!(decode_byte(byte), want);
+            assert_eq!(decode_byte(i as u8), expected[i]);
         }
     }
 

@@ -2,7 +2,9 @@
 
 [![Docs](https://docs.rs/base16/badge.svg)](https://docs.rs/base16)
 
-This is a base16 (e.g. hexadecimal) encoding and decoding library with an emphasis on performance. At the time of this writing, it's faster than the competitors that I could find.
+This is a base16 (e.g. hexadecimal) encoding and decoding library which was initially written with an emphasis on performance.
+
+This was before Rust added SIMD, and I haven't gotten around to adding that. It's still probably the fastest non-SIMD impl, but that doesn't say much.
 
 ## Usage
 

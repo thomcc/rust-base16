@@ -8,8 +8,16 @@ description = "base16 (hex) encoding and decoding"
 categories = ["encoding"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
+edition = "2018"
+
+[features]
+std = []
+default = ["std"]
 
 [dependencies]
 
 [dev-dependencies]
 rand = "0.4"
+
+[package.metadata.docs.rs]
+all-features = true
