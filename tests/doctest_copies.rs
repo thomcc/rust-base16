@@ -1,3 +1,9 @@
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 // Can't run doctests for a no_std crate if it uses allocator (e.g. can't run
 // them if we're using `alloc`), so we duplicate them here...
 // See https://github.com/rust-lang/rust/issues/54010
@@ -85,10 +91,11 @@ fn test_decode() {
 #[cfg(feature = "alloc")]
 #[test]
 fn test_decode_buf() {
+    use alloc::vec::Vec;
     let mut result = Vec::new();
     assert_eq!(base16::decode_buf(b"4d61646f6b61", &mut result).unwrap(), 6);
     assert_eq!(base16::decode_buf(b"486F6D757261", &mut result).unwrap(), 6);
-    assert_eq!(std::str::from_utf8(&result).unwrap(), "MadokaHomura");
+    assert_eq!(core::str::from_utf8(&result).unwrap(), "MadokaHomura");
 }
 
 #[test]
