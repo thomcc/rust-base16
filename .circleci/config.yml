@@ -28,3 +28,12 @@ jobs:
       - run:
           name: Test (no std or alloc)
           command: cargo test --all --no-default-features
+      - run:
+          # TODO: collect benchmark output somehow?
+          name: Build benchmarks
+          command: cargo bench --no-run
+      # TODO: make sure the fuzz tests build and run for like, at least a second
+      # or so.
+      # TODO: coverage.
+
+
