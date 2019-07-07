@@ -1,0 +1,49 @@
+version: 2.1
+
+jobs:
+  test:
+    docker:
+      - image: circleci/rust:1.36.0
+
+    steps:
+      - checkout
+      - run:
+          name: Version information
+          command: rustc --version; cargo --version; rustup --version
+
+      - run:
+          name: Calculate dependencies
+          command: cargo generate-lockfile
+      - restore_cache:
+          keys:
+            - v4-cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
+
+      - run:
+          name: Build (all features)
+          command: cargo build --all --all-targets --verbose
+      - run:
+          name: Build (only alloc)
+          command: cargo build --verbose --features=alloc --no-default-features
+      - run:
+          name: Build (no std or alloc)
+          command: cargo build --verbose --no-default-features
+
+      - save_cache:
+          paths:
+            - /usr/local/cargo/registry
+            - target/debug/.fingerprint
+            - target/debug/build
+            - target/debug/deps
+          key: v4-cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
+
+      - run:
+          name: Test (all features)
+          command: cargo test --all --verbose
+      - run:
+          name: Test (only alloc)
+          # use `--tests` to skip doctests for the `alloc` feature, since they
+          # fail because of https://github.com/rust-lang/rust/issues/54010
+          command: cargo test --tests --features=alloc --no-default-features
+      - run:
+          name: Test (no std or alloc)
+          command: cargo test --all --no-default-features
