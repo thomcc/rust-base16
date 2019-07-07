@@ -1,32 +1,54 @@
-//! This is a base16 (e.g. hexadecimal) encoding and decoding library with
-//! an emphasis on performance. The API is very similar and inspired by
-//! the base64 crate's API, however it's less complex (base16 is much more
-//! simple than base64).
+//! This is a base16 (e.g. hexadecimal) encoding and decoding library with an
+//! emphasis on performance. The API is very similar and inspired by the base64
+//! crate's API, however it's less complex (base16 is much more simple than
+//! base64).
 //!
 //! # Encoding
 //!
 //! The config options at the moment are limited to the output case (upper vs
 //! lower).
 //!
-//! | Function                       | Output                       | Allocates               |
-//! | ------------------------------ | ---------------------------- | ----------------------- |
-//! | `encode_upper`, `encode_lower` | Returns a new `String`       | Always                  |
-//! | `encode_config`                | Returns a new `String`       | Always                  |
-//! | `encode_config_buf`            | Appends to provided `String` | If buffer needs to grow |
-//! | `encode_config_slice`          | Writes to provided `&[u8]`   | Never                   |
+//! | Function                           | Output                       | Allocates               | Requires `alloc` feature |
+//! | ---------------------------------- | ---------------------------- | ----------------------- | ------------------------ |
+//! | [`encode_upper`], [`encode_lower`] | Returns a new `String`       | Always                  | Yes                      |
+//! | [`encode_config`]                  | Returns a new `String`       | Always                  | Yes                      |
+//! | [`encode_config_buf`]              | Appends to provided `String` | If buffer needs to grow | Yes                      |
+//! | [`encode_config_slice`]            | Writes to provided `&[u8]`   | Never                   | No                       |
 //!
 //! # Decoding
 //!
-//! Note that there are no config options (In the future one might be added
-//! to restrict the input character set, but it's not clear to me that this is
+//! Note that there are no config options (In the future one might be added to
+//! restrict the input character set, but it's not clear to me that this is
 //! useful).
 //!
-//! | Function        | Output                        | Allocates               |
-//! | --------------- | ----------------------------- | ----------------------- |
-//! | `decode`        | Returns a new `Vec<u8>`       | Always                  |
-//! | `decode_buf`    | Appends to provided `Vec<u8>` | If buffer needs to grow |
-//! | `decode_slice`  | Writes to provided `&[u8]`    | Never                   |
+//! | Function          | Output                        | Allocates               | Requires `alloc` feature |
+//! | ----------------- | ----------------------------- | ----------------------- | ------------------------ |
+//! | [`decode`]        | Returns a new `Vec<u8>`       | Always                  | Yes                      |
+//! | [`decode_slice`]  | Writes to provided `&[u8]`    | Never                   | No                       |
+//! | [`decode_buf`]    | Appends to provided `Vec<u8>` | If buffer needs to grow | Yes                      |
 //!
+//! # Features
+//!
+//! This crate has two features, both are enabled by default and exist to allow
+//! users in `no_std` environments to disable various portions of .
+//!
+//! - The `"alloc"` feature, which is on by default, adds a number of helpful
+//!   functions that require use of the [`alloc`][alloc_crate] crate, but not the
+//!   rest of `std`.
+//!     - This is `no_std` compatible.
+//!     - Each function should list whether or not it requires this feature
+//!       under the `Availability` of its documentation.
+//!
+//! - The `"std"` feature, which is on by default, enables the `"alloc"`
+//!   feature, and additionally makes [`DecodeError`] implement the
+//!   `std::error::Error` trait.
+//!
+//!     - Frustratingly, this trait is in `std` (and not in `core` or `alloc`),
+//!       but not implementing it would be quite annoying for some users, so
+//!       it's kept, even though it's what prevents us from being `no_std`
+//!       compatible in all configurations.
+//!
+//! [alloc_crate]: https://doc.rust-lang.org/alloc/index.html
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
