@@ -93,9 +93,12 @@ unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
         let y = byte & 0xf;
         let b0 = *lut.get_unchecked(x as usize);
         let b1 = *lut.get_unchecked(y as usize);
-        *dst.get_unchecked_mut(i + 0) = b0;
-        *dst.get_unchecked_mut(i + 1) = b1;
-        i += 2;
+        *dst.get_unchecked_mut(i) = b0;
+        // Note: the wrapping adds are fine here, since we already checked for
+        // usize overflow (in encoded_size, which the caller is expected to have
+        // called)
+        *dst.get_unchecked_mut(i.wrapping_add(1)) = b1;
+        i = i.wrapping_add(2);
     }
 }
 
@@ -216,12 +219,18 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
                                                   dst: &mut String) -> usize {
     let src = input.as_ref();
     let bytes_to_write = encoded_size(src.len());
+    // Swap the string out while we work on it, so that if we panic, we don't
+    // leave behind garbage (we do clear the string if we panic, but that's
+    // better than UB)
+    let mut work = core::mem::replace(dst, String::new());
     unsafe {
-        let mut dst_bytes = dst.as_mut_vec();
-        let cur_size = dst_bytes.len();
-        grow_vec_uninitialized(&mut dst_bytes, bytes_to_write);
-        encode_slice(src, cfg, &mut dst_bytes.get_unchecked_mut(cur_size..));
+        let mut work_bytes = work.as_mut_vec();
+        let cur_size = work_bytes.len();
+        grow_vec_uninitialized(&mut work_bytes, bytes_to_write);
+        encode_slice(src, cfg, &mut work_bytes.get_unchecked_mut(cur_size..));
     }
+    // Swap `work` back into `dst`.
+    core::mem::swap(dst, &mut work);
     bytes_to_write
 }
 
@@ -523,16 +532,26 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
     if (src.len() & 1) != 0 {
         return Err(invalid_length(src.len()));
     }
+    // Swap the vec out while we work on it, so that if we panic, we don't leave
+    // behind garbage (this will end up cleared if we panic, but that's better
+    // than UB)
+    let mut work = core::mem::replace(v, Vec::default());
     let need_size = src.len() >> 1;
-    let current_size = v.len();
+    let current_size = work.len();
     let res = unsafe {
-        grow_vec_uninitialized(v, need_size);
-        decode_slice_raw(src, &mut v[current_size..])
+        grow_vec_uninitialized(&mut work, need_size);
+        decode_slice_raw(src, &mut work[current_size..])
     };
     match res {
-        Ok(()) => Ok(need_size),
+        Ok(()) => {
+            // Swap back
+            core::mem::swap(v, &mut work);
+            Ok(need_size)
+        }
         Err(index) => {
-            v.truncate(current_size);
+            work.truncate(current_size);
+            // Swap back
+            core::mem::swap(v, &mut work);
             Err(invalid_byte(index, src))
         }
     }
@@ -625,4 +644,35 @@ fn dest_too_small_enc(dst_len: usize, need_size: usize) -> ! {
 #[inline(never)]
 fn dest_too_small_dec(dst_len: usize, need_size: usize) -> ! {
     panic!("Destination buffer not large enough for decoded input {} < {}", dst_len, need_size);
+}
+
+// encoded_size smoke tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    #[should_panic]
+    #[cfg(pointer_size )]
+    fn test_encoded_size_panic_top_bit() {
+        #[cfg(target_pointer_width = "64")]
+        let usz = 0x8000_0000_0000_0000usize;
+        #[cfg(target_pointer_width = "32")]
+        let usz = 0x8000_0000usize;
+        let _ = encoded_size(usz);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_encoded_size_panic_max() {
+        let _ = encoded_size(usize::max_value());
+    }
+
+    #[test]
+    fn test_encoded_size_allows_almost_max() {
+        #[cfg(target_pointer_width = "64")]
+        let usz = 0x7fff_ffff_ffff_ffffusize;
+        #[cfg(target_pointer_width = "32")]
+        let usz = 0x7fff_ffffusize;
+        assert_eq!(encoded_size(usz), usz * 2);
+    }
 }
