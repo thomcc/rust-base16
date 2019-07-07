@@ -46,7 +46,7 @@ pub enum EncConfig {
 
 pub use EncConfig::*;
 
-#[inline(always)]
+#[inline]
 fn encoded_size(source_len: usize) -> usize {
     const USIZE_TOP_BIT: usize = 1usize << (std::mem::size_of::<usize>() * 8 - 1);
     if (source_len & USIZE_TOP_BIT) != 0 {
@@ -56,7 +56,7 @@ fn encoded_size(source_len: usize) -> usize {
 }
 
 // Unsafe since it doesn't check dst's size in release builds.
-#[inline(always)]
+#[inline]
 unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
     static HEX_UPPER: &'static [u8] = b"0123456789ABCDEF";
     static HEX_LOWER: &'static [u8] = b"0123456789abcdef";
@@ -75,7 +75,7 @@ unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
 }
 
 #[cfg(feature = "std")]
-#[inline(always)]
+#[inline]
 fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     let size = encoded_size(bytes.len());
     let mut result = String::with_capacity(size);
@@ -88,7 +88,7 @@ fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
 }
 
 #[cfg(feature = "std")]
-#[inline(always)]
+#[inline]
 unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) {
     v.reserve(grow_by);
     let new_len = v.len() + grow_by;
