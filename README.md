@@ -8,7 +8,7 @@ This was before Rust added SIMD, and I haven't gotten around to adding that. It'
 
 ## Usage
 
-Add `base16 = "0.1"` to Cargo.toml, then:
+Add `base16 = "0.2"` to Cargo.toml, then:
 
 ```rust
 extern crate base16;
