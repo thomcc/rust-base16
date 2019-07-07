@@ -9,23 +9,16 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
-rand = "0.3.15"
-[dependencies.base16]
-path = ".."
-[dependencies.libfuzzer-sys]
-git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+afl = "0.4"
+base16 = { path = ".." }
 
 # Prevent this from interfering with workspaces
 [workspace]
 members = ["."]
 
 [[bin]]
-name = "roundtrip_l"
-path = "fuzz_targets/roundtrip_l.rs"
-
-[[bin]]
-name = "roundtrip_u"
-path = "fuzz_targets/roundtrip_u.rs"
+name = "encode"
+path = "fuzz_targets/encode.rs"
 
 [[bin]]
 name = "decode"
