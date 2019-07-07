@@ -26,9 +26,38 @@ More usage examples in the [docs](https://docs.rs/base16).
 
 ## `no_std` Usage
 
-As of 0.1.2, this crate by default has the `std` feature enabled, however, it
-may be turned off, allowing it to be used in no_std envionments. Not all
-functions are available without the stdlib, but each function should document whether or not it is.
+This crate supports use in `no_std` configurations using the following knobs.
+
+- The `"alloc"` feature, which is on by default, adds a number of helpful functions
+  that require use of the [`alloc`](https://doc.rust-lang.org/alloc/index.html) crate,
+  but not the rest of `std`. This is `no_std` compatible.
+    - Each function documents if it requires use of the `alloc` feature.
+- The `"std"` feature, which is on by default, enables the `"alloc"` feature, and
+  additionally makes `base16::DecodeError` implement the `std::error::Error` trait.
+  (Frustratingly, this trait is in `std` and not in `core` or `alloc`...)
+
+For clarity, this means that by default, we assume you are okay with use of `std`.
+
+If you'd like to disable the use of `std`, but are in an environment where you have
+an allocator (e.g. use of the [`alloc`](https://doc.rust-lang.org/alloc/index.html)
+crate is acceptable), then you require this as `alloc`-only as follows:
+
+```toml
+[dependencies]
+# Turn of use of `std` (but leave use of `alloc`).
+base16 = { version = "0.2", default-features = false, features = ["alloc"] }
+```
+
+If you just want the core `base16` functionality and none of the helpers, then
+you should turn off all features.
+
+```toml
+[dependencies]
+# Turn of use of `std` and `alloc`.
+base16 = { version = "0.2", default-features = false }
+```
+
+Both of these configurations are `no_std` compatible.
 
 # License
 
