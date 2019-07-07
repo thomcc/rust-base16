@@ -79,7 +79,6 @@ fn bench_encode(c: &mut Criterion) {
 }
 
 fn rand_hex_string(size: usize) -> String {
-    use rand::seq::SliceRandom;
     let mut rng = thread_rng();
     let mut s = String::with_capacity(size);
     let chars: &[u8] = b"0123456789abcdefABCDEF";
