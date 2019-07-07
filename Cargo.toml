@@ -6,7 +6,7 @@ keywords = ["hex", "base16", "encode", "decode", "no_std"]
 repository = "https://github.com/thomcc/rust-base16"
 description = "base16 (hex) encoding and decoding"
 categories = ["encoding", "no-std"]
-license = "MIT/Apache-2.0"
+license = "CC0-1.0"
 readme = "README.md"
 edition = "2018"
 

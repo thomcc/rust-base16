@@ -61,4 +61,4 @@ Both of these configurations are `no_std` compatible.
 
 # License
 
-Dual MIT/Apache2 (whichever you prefer) since that seems hip for Rust code.
+Public domain, as explained [here](https://creativecommons.org/publicdomain/zero/1.0/legalcode)

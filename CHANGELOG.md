@@ -6,3 +6,4 @@
 - The use of `std` which requires the `alloc` trait has been split into the
   `alloc` feature.
 
+- `base16` has been relicensed as CC0-1.0 from dual MIT/Apache-2.0.
