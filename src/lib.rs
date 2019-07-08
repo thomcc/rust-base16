@@ -300,11 +300,11 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
 /// This function is available whether or not the `alloc` feature is enabled.
 #[inline]
 pub fn encode_byte(byte: u8, cfg: EncConfig) -> [u8; 2] {
-    static HEX_UPPER: &'static [u8] = b"0123456789ABCDEF";
-    static HEX_LOWER: &'static [u8] = b"0123456789abcdef";
+    static HEX_UPPER: [u8; 16] = *b"0123456789ABCDEF";
+    static HEX_LOWER: [u8; 16] = *b"0123456789abcdef";
     let lut = if cfg == EncodeLower { HEX_LOWER } else { HEX_UPPER };
-    let lo = unsafe { *lut.get_unchecked((byte & 15) as usize) };
-    let hi = unsafe { *lut.get_unchecked((byte >> 4) as usize) };
+    let lo = lut[(byte & 15) as usize];
+    let hi = lut[(byte >> 4) as usize];
     [hi, lo]
 }
 
