@@ -5,6 +5,9 @@ workflows:
   test:
     jobs:
       - Run tests
+  coverage:
+    jobs:
+      - Gen Coverage
 
 jobs:
   Run tests:
@@ -16,7 +19,6 @@ jobs:
       - run:
           name: Version information
           command: rustc --version; cargo --version; rustup --version
-
       - run:
           name: Test (all features)
           command: cargo test --all --verbose
@@ -34,6 +36,34 @@ jobs:
           command: cargo bench --no-run
       # TODO: make sure the fuzz tests build and run for like, at least a second
       # or so.
-      # TODO: coverage.
+
+  Gen Coverage:
+    machine: true
+    steps:
+      - checkout
+      - run:
+          name: Download rustup
+          command: |
+            wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
+            chmod +x rustup-init
+      - run:
+          name: Install Rust
+          command: |
+            ./rustup-init -y --no-modify-path
+            rm rustup-init
+            echo 'export PATH=$HOME/.cargo/bin:$PATH' >> $BASH_ENV
+      - run: sudo apt-get update
+      - run: sudo apt-get install libssl-dev pkg-config cmake zlib1g-dev
+      - run:
+          name: Install Tarpaulin
+          command: cargo install cargo-tarpaulin
+          environment:
+            RUSTFLAGS: --cfg procmacro2_semver_exempt
+      - run:
+          name: Generate coverage report
+          command: cargo tarpaulin --out Xml --all-features
+      - run:
+          name: Upload to codecov.io
+          command: bash <(curl -s https://codecov.io/bash) -Z -f cobertura.xml
 
 
