@@ -4,15 +4,13 @@
 
 This is a base16 (e.g. hexadecimal) encoding and decoding library which was initially written with an emphasis on performance.
 
-This was before Rust added SIMD, and I haven't gotten around to adding that. It's still probably the fastest non-SIMD impl, but that doesn't say much.
+This was before Rust added SIMD, and I haven't gotten around to adding that. It's still probably the fastest non-SIMD impl.
 
 ## Usage
 
 Add `base16 = "0.2"` to Cargo.toml, then:
 
 ```rust
-extern crate base16;
-
 fn main() {
     let original_msg = "Foobar";
     let hex_string = base16::encode_lower(original_msg);

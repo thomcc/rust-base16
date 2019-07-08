@@ -8,7 +8,7 @@
 
 - `base16` has been relicensed as CC0-1.0 from dual MIT/Apache-2.0.
 
-# 0.2.1 (unreleased)
+# 0.2.1
 
 - Make code more bulletproof in the case of panics when using the `decode_buf`
   or `encode_config_buf` functions.
@@ -30,3 +30,6 @@
 
     That said, this is some powerful rationalization, so I'm cutting a new version
     with this fix anyway.
+
+- Additionally, several functions that previously used unsafe internally now
+  either use less unsafe, or are entirely safe.
