@@ -80,7 +80,6 @@ fn encoded_size(source_len: usize) -> usize {
     source_len << 1
 }
 
-// Unsafe since it doesn't check dst's size in release builds.
 #[inline]
 fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
     static HEX_UPPER: [u8; 16] = *b"0123456789ABCDEF";
@@ -97,22 +96,22 @@ fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
 #[inline]
 fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     let size = encoded_size(bytes.len());
-    let mut result = String::with_capacity(size);
-    unsafe {
-        let mut buf = result.as_mut_vec();
-        buf.set_len(size);
-        encode_slice_raw(bytes, cfg, &mut buf);
-    }
-    result
+    let mut buf: Vec<u8> = Vec::with_capacity(size);
+    unsafe { buf.set_len(size); }
+    encode_slice_raw(bytes, cfg, &mut buf);
+    debug_assert!(core::str::from_utf8(&buf).is_ok());
+    unsafe { String::from_utf8_unchecked(buf) }
 }
 
 #[cfg(feature = "alloc")]
 #[inline]
-unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) {
+unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) -> usize {
     v.reserve(grow_by);
-    let new_len = v.len() + grow_by;
+    let initial_len = v.len();
+    let new_len = initial_len + grow_by;
     debug_assert!(new_len <= v.capacity());
     v.set_len(new_len);
+    initial_len
 }
 
 /// Encode bytes as base16, using lower case characters for nibbles between 10
@@ -213,15 +212,15 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
     // Swap the string out while we work on it, so that if we panic, we don't
     // leave behind garbage (we do clear the string if we panic, but that's
     // better than UB)
-    let mut work = core::mem::replace(dst, String::new());
-    unsafe {
-        let mut work_bytes = work.as_mut_vec();
-        let cur_size = work_bytes.len();
-        grow_vec_uninitialized(&mut work_bytes, bytes_to_write);
-        encode_slice_raw(src, cfg, &mut work_bytes[cur_size..]);
-    }
-    // Swap `work` back into `dst`.
-    core::mem::swap(dst, &mut work);
+    let mut buf = core::mem::replace(dst, String::new()).into_bytes();
+    let cur_size = unsafe { grow_vec_uninitialized(&mut buf, bytes_to_write) };
+
+    encode_slice_raw(src, cfg, &mut buf[cur_size..]);
+
+    debug_assert!(core::str::from_utf8(&buf).is_ok());
+    // Put `buf` back into `dst`.
+    *dst = unsafe { String::from_utf8_unchecked(buf) };
+
     bytes_to_write
 }
 
@@ -505,10 +504,9 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
     // than UB)
     let mut work = core::mem::replace(v, Vec::default());
     let need_size = src.len() >> 1;
-    let current_size = work.len();
-    unsafe {
-        grow_vec_uninitialized(&mut work, need_size);
-    }
+    let current_size = unsafe {
+        grow_vec_uninitialized(&mut work, need_size)
+    };
     match decode_slice_raw(src, &mut work[current_size..]) {
         Ok(()) => {
             // Swap back
