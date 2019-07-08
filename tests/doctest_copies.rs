@@ -30,6 +30,20 @@ fn test_encode_config() {
     assert_eq!(base16::encode_config(&data, base16::EncodeUpper), "010203AABBCC");
 }
 
+#[cfg(feature = "alloc")]
+#[test]
+fn test_encode_config_buf() {
+    let messages = &["Taako, ", "Merle, ", "Magnus"];
+    let mut buffer = String::new();
+    for msg in messages {
+        let bytes_written = base16::encode_config_buf(msg.as_bytes(),
+                                                      base16::EncodeUpper,
+                                                      &mut buffer);
+        assert_eq!(bytes_written, msg.len() * 2);
+    }
+    assert_eq!(buffer, "5461616B6F2C204D65726C652C204D61676E7573");
+}
+
 #[test]
 fn test_encode_config_slice() {
     // Writing to a statically sized buffer on the stack.
