@@ -82,24 +82,15 @@ fn encoded_size(source_len: usize) -> usize {
 
 // Unsafe since it doesn't check dst's size in release builds.
 #[inline]
-unsafe fn encode_slice(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
-    static HEX_UPPER: &'static [u8] = b"0123456789ABCDEF";
-    static HEX_LOWER: &'static [u8] = b"0123456789abcdef";
+fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
+    static HEX_UPPER: [u8; 16] = *b"0123456789ABCDEF";
+    static HEX_LOWER: [u8; 16] = *b"0123456789abcdef";
     let lut = if cfg == EncodeLower { HEX_LOWER } else { HEX_UPPER };
     debug_assert!(dst.len() == encoded_size(src.len()));
-    let mut i = 0;
-    for &byte in src.iter() {
-        let x = byte >> 4;
-        let y = byte & 0xf;
-        let b0 = *lut.get_unchecked(x as usize);
-        let b1 = *lut.get_unchecked(y as usize);
-        *dst.get_unchecked_mut(i) = b0;
-        // Note: the wrapping adds are fine here, since we already checked for
-        // usize overflow (in encoded_size, which the caller is expected to have
-        // called)
-        *dst.get_unchecked_mut(i.wrapping_add(1)) = b1;
-        i = i.wrapping_add(2);
-    }
+    dst.chunks_exact_mut(2).zip(src.iter().copied()).for_each(|(d, sb)| {
+        d[0] = lut[(sb >> 4) as usize];
+        d[1] = lut[(sb & 0xf) as usize];
+    })
 }
 
 #[cfg(feature = "alloc")]
@@ -110,7 +101,7 @@ fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     unsafe {
         let mut buf = result.as_mut_vec();
         buf.set_len(size);
-        encode_slice(bytes, cfg, &mut buf);
+        encode_slice_raw(bytes, cfg, &mut buf);
     }
     result
 }
@@ -227,7 +218,7 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
         let mut work_bytes = work.as_mut_vec();
         let cur_size = work_bytes.len();
         grow_vec_uninitialized(&mut work_bytes, bytes_to_write);
-        encode_slice(src, cfg, &mut work_bytes.get_unchecked_mut(cur_size..));
+        encode_slice_raw(src, cfg, &mut work_bytes[cur_size..]);
     }
     // Swap `work` back into `dst`.
     core::mem::swap(dst, &mut work);
@@ -279,9 +270,7 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
     if dst.len() < need_size {
         dest_too_small_enc(dst.len(), need_size);
     }
-    unsafe {
-        encode_slice(src, cfg, dst.get_unchecked_mut(..need_size));
-    }
+    encode_slice_raw(src, cfg, &mut dst[..need_size]);
     need_size
 }
 
