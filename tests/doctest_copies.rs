@@ -33,6 +33,7 @@ fn test_encode_config() {
 #[cfg(feature = "alloc")]
 #[test]
 fn test_encode_config_buf() {
+    use alloc::string::String;
     let messages = &["Taako, ", "Merle, ", "Magnus"];
     let mut buffer = String::new();
     for msg in messages {
