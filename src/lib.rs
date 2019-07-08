@@ -403,7 +403,7 @@ impl std::error::Error for DecodeError {
 }
 
 #[inline]
-fn do_decode_slice_raw(src: &[u8], dst: &mut[u8]) -> isize {
+fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
     static LUT: [i8; 256] = [
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -421,32 +421,19 @@ fn do_decode_slice_raw(src: &[u8], dst: &mut[u8]) -> isize {
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1
     ];
+    // checked in caller.
     debug_assert!(src.len() / 2 == dst.len());
     debug_assert!((src.len() & 1) == 0);
-    let s = src.chunks_exact(2).enumerate().zip(dst.iter_mut()).try_for_each(|((si, s), d)| {
+    src.chunks_exact(2).enumerate().zip(dst.iter_mut()).try_for_each(|((si, s), d)| {
         let r0 = LUT[s[0] as usize];
         let r1 = LUT[s[1] as usize];
         if (r0 | r1) >= 0 {
             *d = ((r0 << 4) | r1) as u8;
             Ok(())
         } else {
-            // This is annoying (but resulted in a 20% speed boost), but we
-            // return the earliest byte that can be the problem byte, and sort
-            // it out in the caller.
-            Err((si * 2) as isize)
+            Err(si * 2)
         }
-    });
-    s.err().unwrap_or(-1)
-}
-
-#[inline]
-fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
-    let bad_idx = do_decode_slice_raw(src, dst);
-    if bad_idx < 0 {
-        Ok(())
-    } else {
-        Err(raw_decode_err(bad_idx as usize, src))
-    }
+    }).map_err(|bad_idx| raw_decode_err(bad_idx, src))
 }
 
 #[cold]
@@ -489,8 +476,7 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
     let need_size = src.len() >> 1;
     let mut dst = Vec::with_capacity(need_size);
     unsafe { dst.set_len(need_size); }
-    let res = decode_slice_raw(src, &mut dst);
-    match res {
+    match decode_slice_raw(src, &mut dst) {
         Ok(()) => Ok(dst),
         Err(index) => Err(invalid_byte(index, src))
     }
@@ -534,8 +520,7 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
     unsafe {
         grow_vec_uninitialized(&mut work, need_size);
     }
-    let res = decode_slice_raw(src, &mut work[current_size..]);
-    match res {
+    match decode_slice_raw(src, &mut work[current_size..]) {
         Ok(()) => {
             // Swap back
             core::mem::swap(v, &mut work);
@@ -585,8 +570,7 @@ pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Resul
     if out.len() < need_size {
         dest_too_small_dec(out.len(), need_size);
     }
-    let res = decode_slice_raw(src, &mut out[..need_size]);
-    match res {
+    match decode_slice_raw(src, &mut out[..need_size]) {
         Ok(()) => Ok(need_size),
         Err(index) => Err(invalid_byte(index, src))
     }
