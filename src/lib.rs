@@ -27,8 +27,8 @@
 //!
 //! # Features
 //!
-//! This crate has two features, both are enabled by default and exist to allow
-//! users in `no_std` environments to disable various portions of .
+//! This crate has two features, both of which exist to allow usage in `no_std`
+//! environments.
 //!
 //! - The `"alloc"` feature, which is on by default, adds a number of helpful
 //!   functions that require use of the [`alloc`][alloc_crate] crate, but not
