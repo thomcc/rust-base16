@@ -4,7 +4,7 @@
 
 This is a base16 (e.g. hexadecimal) encoding and decoding library which was initially written with an emphasis on performance.
 
-This was before Rust added SIMD, and I haven't gotten around to adding that. It's still probably the fastest non-SIMD impl.
+The bulk of this was written before Rust added SIMD, and I haven't gotten around to adding that. When I wrote it, it was the fastest non-SIMD impl, but I haven't done any comparison recently.
 
 ## Usage
 
@@ -30,20 +30,14 @@ This crate supports use in `no_std` configurations using the following knobs.
   that require use of the [`alloc`](https://doc.rust-lang.org/alloc/index.html) crate,
   but not the rest of `std`. This is `no_std` compatible.
     - Each function documents if it requires use of the `alloc` feature.
-- The `"std"` feature, which is on by default, enables the `"alloc"` feature, and
+- The `"std"` feature, which is not on by default, enables the `"alloc"` feature, and
   additionally makes `base16::DecodeError` implement the `std::error::Error` trait.
-  (Frustratingly, this trait is in `std` and not in `core` or `alloc`...)
 
-For clarity, this means that by default, we assume you are okay with use of `std`.
-
-If you'd like to disable the use of `std`, but are in an environment where you have
-an allocator (e.g. use of the [`alloc`](https://doc.rust-lang.org/alloc/index.html)
-crate is acceptable), then you require this as `alloc`-only as follows:
+For clarity, this means that by default, we assume you are okay with use of the global allocator. This can be disabled as follows:
 
 ```toml
 [dependencies]
-# Turn of use of `std` (but leave use of `alloc`).
-base16 = { version = "0.2", default-features = false, features = ["alloc"] }
+base16 = { version = "0.2", default-features = false }
 ```
 
 If you just want the core `base16` functionality and none of the helpers, then

@@ -1,7 +1,5 @@
 //! This is a base16 (e.g. hexadecimal) encoding and decoding library with an
-//! emphasis on performance. The API is very similar and inspired by the base64
-//! crate's API, however it's less complex (base16 is much more simple than
-//! base64).
+//! emphasis on performance, at least compared to some of the competitor crates.
 //!
 //! # Encoding
 //!
@@ -33,20 +31,15 @@
 //! users in `no_std` environments to disable various portions of .
 //!
 //! - The `"alloc"` feature, which is on by default, adds a number of helpful
-//!   functions that require use of the [`alloc`][alloc_crate] crate, but not the
-//!   rest of `std`.
+//!   functions that require use of the [`alloc`][alloc_crate] crate, but not
+//!   the rest of `std`.
 //!     - This is `no_std` compatible.
 //!     - Each function should list whether or not it requires this feature
 //!       under the `Availability` of its documentation.
 //!
-//! - The `"std"` feature, which is on by default, enables the `"alloc"`
+//! - The `"std"` feature, which is not on by default, enables the `"alloc"`
 //!   feature, and additionally makes [`DecodeError`] implement the
 //!   `std::error::Error` trait.
-//!
-//!     - Frustratingly, this trait is in `std` (and not in `core` or `alloc`),
-//!       but not implementing it would be quite annoying for some users, so
-//!       it's kept, even though it's what prevents us from being `no_std`
-//!       compatible in all configurations.
 //!
 //! [alloc_crate]: https://doc.rust-lang.org/alloc/index.html
 
