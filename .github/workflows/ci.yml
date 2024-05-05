@@ -41,6 +41,7 @@ jobs:
       - uses: hecrj/setup-rust-action@v2
         with:
           rust-version: nightly
+          components: miri
       - run: cargo miri test --verbose --workspace --no-default-features
       - run: cargo miri test --verbose --workspace --no-default-features --features=alloc
       - run: cargo miri test --verbose --workspace --all-features
@@ -77,8 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hecrj/setup-rust-action@v2
-      - run: cargo check --workspace --all-targets --verbose
-      - run: cargo check --workspace --all-targets --verbose --no-default-features
+      - run: cargo check --workspace --all-targets --verbose --all-features
 
   rustfmt:
     name: Verify code formatting
