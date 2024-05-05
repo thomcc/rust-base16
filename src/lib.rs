@@ -427,11 +427,11 @@ impl core::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
             DecodeError::InvalidByte { index, byte } => {
-                write!(f, "Invalid byte `b{:?}`, at index {}.", byte as char, index)
+                write!(f, "invalid byte `b{:?}`, at index {}", byte as char, index)
             }
             DecodeError::InvalidLength { length } => write!(
                 f,
-                "Base16 data cannot have length {} (must be even)",
+                "base16 data cannot have length {} (must be even)",
                 length
             ),
         }
@@ -439,18 +439,7 @@ impl core::fmt::Display for DecodeError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for DecodeError {
-    fn description(&self) -> &str {
-        match *self {
-            DecodeError::InvalidByte { .. } => "Illegal byte in base16 data",
-            DecodeError::InvalidLength { .. } => "Illegal length for base16 data",
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        None
-    }
-}
+impl std::error::Error for DecodeError {}
 
 #[inline]
 fn decode_slice_raw(src: &[u8], dst: &mut [MaybeUninit<u8>]) -> Result<(), usize> {
