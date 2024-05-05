@@ -1,0 +1,19 @@
+[package]
+publish = false
+name = "base16-bench"
+version = "0.0.1"
+license = "Unlicense OR MIT OR Apache-2.0"
+edition = "2021"
+
+[lib]
+bench = false
+
+[[bench]]
+harness = false
+name = "base16-benches"
+path = "benches/bench.rs"
+
+[dev-dependencies]
+base16 = { path = ".." }
+rand = "0.8.5"
+divan = "0.1.14"
