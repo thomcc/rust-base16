@@ -86,6 +86,7 @@ fn test_exhaustive_bytes_decode() {
 #[cfg(feature = "alloc")]
 #[test]
 fn test_decode_errors() {
+    use alloc::string::ToString;
     let mut buf = decode(b"686f6d61646f6b61").unwrap();
     let orig = buf.clone();
 
