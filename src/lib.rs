@@ -76,6 +76,7 @@ fn encoded_size(source_len: usize) -> usize {
     source_len << 1
 }
 
+// Always fully initializes `dst` (or panics) with hex-encoded bytes.
 #[inline]
 #[track_caller]
 fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [MaybeUninit<u8>]) {
@@ -99,10 +100,13 @@ fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [MaybeUninit<u8>]) {
 fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     let size = encoded_size(bytes.len());
     let mut buf: Vec<MaybeUninit<u8>> = Vec::with_capacity(size);
+    // Safety: It's a vec of MaybeUninit
     unsafe { buf.set_len(size) };
     encode_slice_raw(bytes, cfg, &mut buf);
+    // Safety: `encode_slice_raw` always writes to the whole input
     let buf = unsafe { assume_init_vec(buf) };
     debug_assert!(core::str::from_utf8(&buf).is_ok());
+    // Safety: Hex-encoded bytes are all ASCII, which means they're valid UTF-8
     unsafe { String::from_utf8_unchecked(buf) }
 }
 
@@ -125,7 +129,7 @@ fn into_maybe_uninit_vec(v: Vec<u8>) -> Vec<MaybeUninit<u8>> {
     let len = v.len();
     let cap = v.capacity();
     let ptr = v.as_mut_ptr();
-    // safety: All init vecs are valid for maybeuninit
+    // safety: All init vecs are valid for MaybeUninit
     unsafe { Vec::from_raw_parts(ptr.cast(), len, cap) }
 }
 
@@ -494,6 +498,7 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
     }
     let need_size = src.len() >> 1;
     let mut dst = Vec::with_capacity(need_size);
+    // Safety: It's a Vec<MaybeUninit<u8>>
     unsafe { dst.set_len(need_size) };
     match decode_slice_raw(src, &mut dst) {
         // Safety: decode_slice_raw fully initializes its input on success.
@@ -540,17 +545,21 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(
     let need_size = src.len() >> 1;
     let (mut work, current_size) = grow_vec_uninitialized(work, need_size);
     match decode_slice_raw(src, &mut work[current_size..]) {
+        // Safety: On success, the input is fully initialized
         Ok(()) => unsafe {
             // Swap back
             core::mem::swap(v, &mut assume_init_vec(work));
             Ok(need_size)
         },
-        Err(index) => unsafe {
+        Err(index) => {
+            // Truncate the potentially-uninitialized bytes
             work.truncate(current_size);
-            // Swap back
-            core::mem::swap(v, &mut assume_init_vec(work));
+            // Safety: None of the bytes after `current_size` could have been
+            // modified (they weren't part of the slice that got passed in), so
+            // this is just restoring the original vec.
+            unsafe { core::mem::swap(v, &mut assume_init_vec(work)) };
             Err(invalid_byte(index, src))
-        },
+        }
     }
 }
 
@@ -673,12 +682,13 @@ mod tests {
     use super::*;
     #[test]
     #[should_panic]
-    #[cfg(pointer_size)]
     fn test_encoded_size_panic_top_bit() {
         #[cfg(target_pointer_width = "64")]
         let usz = 0x8000_0000_0000_0000usize;
         #[cfg(target_pointer_width = "32")]
         let usz = 0x8000_0000usize;
+        #[cfg(target_pointer_width = "16")]
+        let usz = 0x8000usize;
         let _ = encoded_size(usz);
     }
 
