@@ -12,7 +12,7 @@ readme = "README.md"
 edition = "2021"
 
 [workspace]
-members = ["benchmarks"]
+members = ["benchmarks", "fuzz"]
 
 [lib]
 bench = false
