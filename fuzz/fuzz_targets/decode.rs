@@ -1,10 +1,7 @@
+#![no_main]
 
-#[macro_use]
-extern crate afl;
+use libfuzzer_sys::fuzz_target;
 
-fn main() {
-    fuzz!(|data: &[u8]| {
-        // Likely invalid.
-        let _ = base16::decode(data);
-    });
-}
+fuzz_target!(|data: &[u8]| {
+    let _ = base16::decode(data);
+});

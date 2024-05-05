@@ -1,10 +1,9 @@
 # Running fuzz tests
 
 ```sh
-cargo install afl
-cargo afl build
+cargo install cargo-fuzz
 # fuzz `decode`
-cargo afl fuzz -i in -o out target/debug/decode
+cargo fuzz run decode
 # fuzz `encode`
-cargo afl fuzz -i in -o out target/debug/encode
+cargo fuzz run encode
 ```
