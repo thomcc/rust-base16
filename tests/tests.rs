@@ -105,6 +105,19 @@ fn test_decode_errors() {
         })
     );
     assert_eq!(buf, orig);
+
+    assert_eq!(
+        DecodeError::InvalidLength { length: 3 }.to_string(),
+        "base16 data cannot have length 3 (must be even)",
+    );
+    assert_eq!(
+        DecodeError::InvalidByte {
+            byte: b'g',
+            index: 16
+        }
+        .to_string(),
+        "invalid byte `b'g'`, at index 16",
+    );
 }
 
 #[test]
