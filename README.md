@@ -1,6 +1,7 @@
 # [base16](https://crates.io/crates/base16) (hex) encoding for Rust.
 
-[![Docs](https://docs.rs/base16/badge.svg)](https://docs.rs/base16) [![CircleCI](https://circleci.com/gh/thomcc/rust-base16.svg?style=svg)](https://circleci.com/gh/thomcc/rust-base16) [![codecov](https://codecov.io/gh/thomcc/rust-base16/branch/master/graph/badge.svg)](https://codecov.io/gh/thomcc/rust-base16)
+[![Docs](https://docs.rs/base16/badge.svg)](https://docs.rs/base16)
+[![codecov](https://codecov.io/gh/thomcc/rust-base16/branch/master/graph/badge.svg)](https://codecov.io/gh/thomcc/rust-base16)
 
 This is a base16 (e.g. hexadecimal) encoding and decoding library which was initially written with an emphasis on performance.
 
