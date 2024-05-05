@@ -11,20 +11,16 @@ license = "MIT OR Apache-2.0 OR Unlicense"
 readme = "README.md"
 edition = "2021"
 
+[workspace]
+members = ["benchmarks"]
+
+[lib]
+bench = false
+
 [features]
 std = ["alloc"]
 alloc = []
 default = ["alloc"]
-
-[dependencies]
-
-[dev-dependencies]
-rand = "0.8.5"
-divan = "0.1.14"
-
-[[bench]]
-name = "bench"
-harness = false
 
 [package.metadata.docs.rs]
 all-features = true
