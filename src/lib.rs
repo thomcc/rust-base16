@@ -74,6 +74,7 @@ pub enum EncConfig {
 pub use EncConfig::*;
 
 #[inline]
+#[track_caller]
 fn encoded_size(source_len: usize) -> usize {
     const USIZE_TOP_BIT: usize = 1usize << (core::mem::size_of::<usize>() * 8 - 1);
     if (source_len & USIZE_TOP_BIT) != 0 {
@@ -83,6 +84,7 @@ fn encoded_size(source_len: usize) -> usize {
 }
 
 #[inline]
+#[track_caller]
 fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [MaybeUninit<u8>]) {
     let lut = if cfg == EncodeLower {
         HEX_LOWER
@@ -100,6 +102,7 @@ fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [MaybeUninit<u8>]) {
 
 #[cfg(feature = "alloc")]
 #[inline]
+#[track_caller]
 fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     let size = encoded_size(bytes.len());
     let mut buf: Vec<MaybeUninit<u8>> = Vec::with_capacity(size);
@@ -166,6 +169,7 @@ fn grow_vec_uninitialized(v: Vec<u8>, grow_by: usize) -> (Vec<MaybeUninit<u8>>, 
 /// needs to produce a String.
 #[cfg(feature = "alloc")]
 #[inline]
+#[track_caller]
 pub fn encode_lower<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
     encode_to_string(input.as_ref(), EncodeLower)
 }
@@ -188,6 +192,7 @@ pub fn encode_lower<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
 /// needs to produce a `String`.
 #[cfg(feature = "alloc")]
 #[inline]
+#[track_caller]
 pub fn encode_upper<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
     encode_to_string(input.as_ref(), EncodeUpper)
 }
@@ -237,6 +242,7 @@ pub fn encode_config<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig) -> Stri
 /// needs write to a `String`.
 #[cfg(feature = "alloc")]
 #[inline]
+#[track_caller]
 pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(
     input: &T,
     cfg: EncConfig,
@@ -300,6 +306,7 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(
 ///
 /// This function is available whether or not the `alloc` feature is enabled.
 #[inline]
+#[track_caller]
 pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(
     input: &T,
     cfg: EncConfig,
@@ -654,12 +661,14 @@ static DECODE_LUT: [i8; 256] = [
 // Outlined assertions.
 #[inline(never)]
 #[cold]
+#[track_caller]
 fn usize_overflow(len: usize) -> ! {
     panic!("usize overflow when computing size of destination: {}", len);
 }
 
 #[cold]
 #[inline(never)]
+#[track_caller]
 fn dest_too_small_enc(dst_len: usize, need_size: usize) -> ! {
     panic!(
         "Destination is not large enough to encode input: {} < {}",
