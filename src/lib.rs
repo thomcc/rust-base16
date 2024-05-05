@@ -56,8 +56,10 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+use core::mem::MaybeUninit;
+
 #[cfg(feature = "alloc")]
-use alloc::{vec::Vec, string::String};
+use alloc::{string::String, vec::Vec};
 
 /// Configuration options for encoding. Just specifies whether or not output
 /// should be uppercase or lowercase.
@@ -81,35 +83,69 @@ fn encoded_size(source_len: usize) -> usize {
 }
 
 #[inline]
-fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [u8]) {
-    let lut = if cfg == EncodeLower { HEX_LOWER } else { HEX_UPPER };
-    debug_assert!(dst.len() == encoded_size(src.len()));
-    dst.chunks_exact_mut(2).zip(src.iter().copied()).for_each(|(d, sb)| {
-        d[0] = lut[(sb >> 4) as usize];
-        d[1] = lut[(sb & 0xf) as usize];
-    })
+fn encode_slice_raw(src: &[u8], cfg: EncConfig, dst: &mut [MaybeUninit<u8>]) {
+    let lut = if cfg == EncodeLower {
+        HEX_LOWER
+    } else {
+        HEX_UPPER
+    };
+    assert!(dst.len() == encoded_size(src.len()));
+    dst.chunks_exact_mut(2)
+        .zip(src.iter().copied())
+        .for_each(|(d, sb)| {
+            d[0] = MaybeUninit::new(lut[(sb >> 4) as usize]);
+            d[1] = MaybeUninit::new(lut[(sb & 0xf) as usize]);
+        })
 }
 
 #[cfg(feature = "alloc")]
 #[inline]
 fn encode_to_string(bytes: &[u8], cfg: EncConfig) -> String {
     let size = encoded_size(bytes.len());
-    let mut buf: Vec<u8> = Vec::with_capacity(size);
-    unsafe { buf.set_len(size); }
+    let mut buf: Vec<MaybeUninit<u8>> = Vec::with_capacity(size);
+    unsafe { buf.set_len(size) };
     encode_slice_raw(bytes, cfg, &mut buf);
+    let buf = unsafe { assume_init_vec(buf) };
     debug_assert!(core::str::from_utf8(&buf).is_ok());
     unsafe { String::from_utf8_unchecked(buf) }
 }
 
 #[cfg(feature = "alloc")]
 #[inline]
-unsafe fn grow_vec_uninitialized(v: &mut Vec<u8>, grow_by: usize) -> usize {
+unsafe fn assume_init_vec(v: Vec<MaybeUninit<u8>>) -> Vec<u8> {
+    use core::mem::ManuallyDrop;
+    let mut v = ManuallyDrop::new(v);
+    let len = v.len();
+    let cap = v.capacity();
+    let ptr = v.as_mut_ptr();
+    Vec::from_raw_parts(ptr.cast(), len, cap)
+}
+
+#[cfg(feature = "alloc")]
+#[inline]
+fn into_maybe_uninit_vec(v: Vec<u8>) -> Vec<MaybeUninit<u8>> {
+    use core::mem::ManuallyDrop;
+    let mut v = ManuallyDrop::new(v);
+    let len = v.len();
+    let cap = v.capacity();
+    let ptr = v.as_mut_ptr();
+    // safety: All init vecs are valid for maybeuninit
+    unsafe { Vec::from_raw_parts(ptr.cast(), len, cap) }
+}
+
+// Returns (uninit vec, old len)
+#[cfg(feature = "alloc")]
+#[inline]
+fn grow_vec_uninitialized(v: Vec<u8>, grow_by: usize) -> (Vec<MaybeUninit<u8>>, usize) {
+    let mut v = into_maybe_uninit_vec(v);
     v.reserve(grow_by);
     let initial_len = v.len();
     let new_len = initial_len + grow_by;
     debug_assert!(new_len <= v.capacity());
-    v.set_len(new_len);
-    initial_len
+    // Safety: we just reserved this much, and MaybeUninit is allowed to not be
+    // initialized.
+    unsafe { v.set_len(new_len) };
+    (v, initial_len)
 }
 
 /// Encode bytes as base16, using lower case characters for nibbles between 10
@@ -156,7 +192,6 @@ pub fn encode_upper<T: ?Sized + AsRef<[u8]>>(input: &T) -> String {
     encode_to_string(input.as_ref(), EncodeUpper)
 }
 
-
 /// Encode `input` into a string using the listed config. The resulting string
 /// contains `input.len() * 2` bytes.
 ///
@@ -202,23 +237,29 @@ pub fn encode_config<T: ?Sized + AsRef<[u8]>>(input: &T, cfg: EncConfig) -> Stri
 /// needs write to a `String`.
 #[cfg(feature = "alloc")]
 #[inline]
-pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
-                                                  cfg: EncConfig,
-                                                  dst: &mut String) -> usize {
+pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(
+    input: &T,
+    cfg: EncConfig,
+    dst: &mut String,
+) -> usize {
     let src = input.as_ref();
     let bytes_to_write = encoded_size(src.len());
     // Swap the string out while we work on it, so that if we panic, we don't
     // leave behind garbage (we do clear the string if we panic, but that's
     // better than UB)
-    let mut buf = core::mem::replace(dst, String::new()).into_bytes();
-    let cur_size = unsafe { grow_vec_uninitialized(&mut buf, bytes_to_write) };
+    let buf = core::mem::replace(dst, String::new()).into_bytes();
+
+    let (mut buf, cur_size) = grow_vec_uninitialized(buf, bytes_to_write);
 
     encode_slice_raw(src, cfg, &mut buf[cur_size..]);
 
-    debug_assert!(core::str::from_utf8(&buf).is_ok());
-    // Put `buf` back into `dst`.
-    *dst = unsafe { String::from_utf8_unchecked(buf) };
-
+    // Safety: encode_slice_raw fully initializes it's input with ASCII (which
+    // is valid UTF-8).
+    unsafe {
+        let buf = assume_init_vec(buf);
+        debug_assert!(core::str::from_utf8(&buf).is_ok());
+        *dst = String::from_utf8_unchecked(buf);
+    };
     bytes_to_write
 }
 
@@ -259,16 +300,26 @@ pub fn encode_config_buf<T: ?Sized + AsRef<[u8]>>(input: &T,
 ///
 /// This function is available whether or not the `alloc` feature is enabled.
 #[inline]
-pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
-                                                    cfg: EncConfig,
-                                                    dst: &mut [u8]) -> usize {
+pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(
+    input: &T,
+    cfg: EncConfig,
+    dst: &mut [u8],
+) -> usize {
     let src = input.as_ref();
     let need_size = encoded_size(src.len());
     if dst.len() < need_size {
         dest_too_small_enc(dst.len(), need_size);
     }
-    encode_slice_raw(src, cfg, &mut dst[..need_size]);
+    encode_slice_raw(src, cfg, as_uninit_slice(&mut dst[..need_size]));
     need_size
+}
+
+#[inline]
+fn as_uninit_slice(s: &mut [u8]) -> &mut [MaybeUninit<u8>] {
+    let len = s.len();
+    let ptr = s.as_mut_ptr();
+    // Safety: there are no invalid values for MaybeUninit
+    unsafe { core::slice::from_raw_parts_mut(ptr.cast(), len) }
 }
 
 /// Encode a single character as hex, returning a tuple containing the two
@@ -286,7 +337,11 @@ pub fn encode_config_slice<T: ?Sized + AsRef<[u8]>>(input: &T,
 /// This function is available whether or not the `alloc` feature is enabled.
 #[inline]
 pub fn encode_byte(byte: u8, cfg: EncConfig) -> [u8; 2] {
-    let lut = if cfg == EncodeLower { HEX_LOWER } else { HEX_UPPER };
+    let lut = if cfg == EncodeLower {
+        HEX_LOWER
+    } else {
+        HEX_UPPER
+    };
     let lo = lut[(byte & 15) as usize];
     let hi = lut[(byte >> 4) as usize];
     [hi, lo]
@@ -339,12 +394,12 @@ pub enum DecodeError {
         /// The index at which the problematic byte was found.
         index: usize,
         /// The byte that we cannot decode.
-        byte: u8
+        byte: u8,
     },
     /// The length of the input not a multiple of two
     InvalidLength {
         /// The input length.
-        length: usize
+        length: usize,
     },
 }
 
@@ -355,19 +410,23 @@ fn invalid_length(length: usize) -> DecodeError {
 
 #[cold]
 fn invalid_byte(index: usize, src: &[u8]) -> DecodeError {
-    DecodeError::InvalidByte { index, byte: src[index] }
+    DecodeError::InvalidByte {
+        index,
+        byte: src[index],
+    }
 }
 
 impl core::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match *self {
             DecodeError::InvalidByte { index, byte } => {
-                write!(f, "Invalid byte `b{:?}`, at index {}.",
-                       byte as char, index)
+                write!(f, "Invalid byte `b{:?}`, at index {}.", byte as char, index)
             }
-            DecodeError::InvalidLength { length } =>
-                write!(f, "Base16 data cannot have length {} (must be even)",
-                       length),
+            DecodeError::InvalidLength { length } => write!(
+                f,
+                "Base16 data cannot have length {} (must be even)",
+                length
+            ),
         }
     }
 }
@@ -387,20 +446,24 @@ impl std::error::Error for DecodeError {
 }
 
 #[inline]
-fn decode_slice_raw(src: &[u8], dst: &mut[u8]) -> Result<(), usize> {
+fn decode_slice_raw(src: &[u8], dst: &mut [MaybeUninit<u8>]) -> Result<(), usize> {
     // checked in caller.
     debug_assert!(src.len() / 2 == dst.len());
     debug_assert!((src.len() & 1) == 0);
-    src.chunks_exact(2).enumerate().zip(dst.iter_mut()).try_for_each(|((si, s), d)| {
-        let r0 = DECODE_LUT[s[0] as usize];
-        let r1 = DECODE_LUT[s[1] as usize];
-        if (r0 | r1) >= 0 {
-            *d = ((r0 << 4) | r1) as u8;
-            Ok(())
-        } else {
-            Err(si * 2)
-        }
-    }).map_err(|bad_idx| raw_decode_err(bad_idx, src))
+    src.chunks_exact(2)
+        .enumerate()
+        .zip(dst.iter_mut())
+        .try_for_each(|((si, s), d)| {
+            let r0 = DECODE_LUT[s[0] as usize];
+            let r1 = DECODE_LUT[s[1] as usize];
+            if (r0 | r1) >= 0 {
+                *d = MaybeUninit::new(((r0 << 4) | r1) as u8);
+                Ok(())
+            } else {
+                Err(si * 2)
+            }
+        })
+        .map_err(|bad_idx| raw_decode_err(bad_idx, src))
 }
 
 #[cold]
@@ -442,13 +505,13 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
     }
     let need_size = src.len() >> 1;
     let mut dst = Vec::with_capacity(need_size);
-    unsafe { dst.set_len(need_size); }
+    unsafe { dst.set_len(need_size) };
     match decode_slice_raw(src, &mut dst) {
-        Ok(()) => Ok(dst),
-        Err(index) => Err(invalid_byte(index, src))
+        // Safety: decode_slice_raw fully initializes its input on success.
+        Ok(()) => unsafe { Ok(assume_init_vec(dst)) },
+        Err(index) => Err(invalid_byte(index, src)),
     }
 }
-
 
 /// Decode bytes from base16, and appends into the provided buffer. Only
 /// allocates if the buffer could not fit the data. Returns the number of bytes
@@ -473,7 +536,10 @@ pub fn decode<T: ?Sized + AsRef<[u8]>>(input: &T) -> Result<Vec<u8>, DecodeError
 /// needs to write to a Vec.
 #[cfg(feature = "alloc")]
 #[inline]
-pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result<usize, DecodeError> {
+pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(
+    input: &T,
+    v: &mut Vec<u8>,
+) -> Result<usize, DecodeError> {
     let src = input.as_ref();
     if (src.len() & 1) != 0 {
         return Err(invalid_length(src.len()));
@@ -481,23 +547,21 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
     // Swap the vec out while we work on it, so that if we panic, we don't leave
     // behind garbage (this will end up cleared if we panic, but that's better
     // than UB)
-    let mut work = core::mem::replace(v, Vec::default());
+    let work = core::mem::replace(v, Vec::default());
     let need_size = src.len() >> 1;
-    let current_size = unsafe {
-        grow_vec_uninitialized(&mut work, need_size)
-    };
+    let (mut work, current_size) = grow_vec_uninitialized(work, need_size);
     match decode_slice_raw(src, &mut work[current_size..]) {
-        Ok(()) => {
+        Ok(()) => unsafe {
             // Swap back
-            core::mem::swap(v, &mut work);
+            core::mem::swap(v, &mut assume_init_vec(work));
             Ok(need_size)
-        }
-        Err(index) => {
+        },
+        Err(index) => unsafe {
             work.truncate(current_size);
             // Swap back
-            core::mem::swap(v, &mut work);
+            core::mem::swap(v, &mut assume_init_vec(work));
             Err(invalid_byte(index, src))
-        }
+        },
     }
 }
 
@@ -527,7 +591,10 @@ pub fn decode_buf<T: ?Sized + AsRef<[u8]>>(input: &T, v: &mut Vec<u8>) -> Result
 ///
 /// This function is available whether or not the `alloc` feature is enabled.
 #[inline]
-pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Result<usize, DecodeError> {
+pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(
+    input: &T,
+    out: &mut [u8],
+) -> Result<usize, DecodeError> {
     let src = input.as_ref();
     if (src.len() & 1) != 0 {
         return Err(invalid_length(src.len()));
@@ -536,9 +603,9 @@ pub fn decode_slice<T: ?Sized + AsRef<[u8]>>(input: &T, out: &mut [u8]) -> Resul
     if out.len() < need_size {
         dest_too_small_dec(out.len(), need_size);
     }
-    match decode_slice_raw(src, &mut out[..need_size]) {
+    match decode_slice_raw(src, as_uninit_slice(&mut out[..need_size])) {
         Ok(()) => Ok(need_size),
-        Err(index) => Err(invalid_byte(index, src))
+        Err(index) => Err(invalid_byte(index, src)),
     }
 }
 
@@ -572,21 +639,17 @@ pub fn decode_byte(c: u8) -> Option<u8> {
 static HEX_UPPER: [u8; 16] = *b"0123456789ABCDEF";
 static HEX_LOWER: [u8; 16] = *b"0123456789abcdef";
 static DECODE_LUT: [i8; 256] = [
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,  0,  1,  2,  3,  4,  5,
-        6,  7,  8,  9, -1, -1, -1, -1, -1, -1, -1, 10, 11, 12, 13, 14, 15, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, -1, -1, -1, -1, -1, -1, -1, 10, 11, 12, 13, 14, 15, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 10,
+    11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 ];
 // Outlined assertions.
 #[inline(never)]
@@ -598,13 +661,19 @@ fn usize_overflow(len: usize) -> ! {
 #[cold]
 #[inline(never)]
 fn dest_too_small_enc(dst_len: usize, need_size: usize) -> ! {
-    panic!("Destination is not large enough to encode input: {} < {}", dst_len, need_size);
+    panic!(
+        "Destination is not large enough to encode input: {} < {}",
+        dst_len, need_size
+    );
 }
 
 #[cold]
 #[inline(never)]
 fn dest_too_small_dec(dst_len: usize, need_size: usize) -> ! {
-    panic!("Destination buffer not large enough for decoded input {} < {}", dst_len, need_size);
+    panic!(
+        "Destination buffer not large enough for decoded input {} < {}",
+        dst_len, need_size
+    );
 }
 
 // encoded_size smoke tests
@@ -613,7 +682,7 @@ mod tests {
     use super::*;
     #[test]
     #[should_panic]
-    #[cfg(pointer_size )]
+    #[cfg(pointer_size)]
     fn test_encoded_size_panic_top_bit() {
         #[cfg(target_pointer_width = "64")]
         let usz = 0x8000_0000_0000_0000usize;
