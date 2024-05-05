@@ -30,7 +30,7 @@ fn bench_decode(bencher: Bencher, len: usize) {
     bencher
         .counter(len * 2)
         .with_inputs(|| rand_hex_string(len * 2))
-        .bench_values(|inp| base16::decode(&inp));
+        .bench_refs(|inp| base16::decode(&inp));
 }
 
 #[divan::bench(args = SIZES)]
@@ -38,7 +38,7 @@ fn bench_encode(bencher: Bencher, len: usize) {
     bencher
         .counter(len)
         .with_inputs(|| rand_enc_input(len))
-        .bench_values(|(inp, c)| base16::encode_config(&inp, c));
+        .bench_refs(|(inp, c)| base16::encode_config(&inp, *c));
 }
 
 #[divan::bench(args = SIZES)]
@@ -46,11 +46,7 @@ fn bench_decode_buf(bencher: Bencher, len: usize) {
     bencher
         .counter(len * 2)
         .with_inputs(|| (rand_hex_string(len * 2), Vec::<u8>::with_capacity(len)))
-        .bench_values(|(inp, mut buf)| {
-            let r = base16::decode_buf(&inp, &mut buf);
-            divan::black_box(buf.as_mut_ptr());
-            r
-        });
+        .bench_refs(|(inp, ref mut buf)| base16::decode_buf(inp, buf));
 }
 
 #[divan::bench(args = SIZES)]
@@ -58,11 +54,7 @@ fn bench_encode_buf(bencher: Bencher, len: usize) {
     bencher
         .counter(len)
         .with_inputs(|| (rand_enc_input(len), String::with_capacity(len * 2)))
-        .bench_values(|((inp, c), mut buf)| {
-            let r = base16::encode_config_buf(&inp, c, &mut buf);
-            divan::black_box(buf.as_mut_ptr());
-            r
-        });
+        .bench_refs(|((inp, c), ref mut buf)| base16::encode_config_buf(&inp, *c, buf));
 }
 
 #[divan::bench(args = SIZES)]
@@ -70,11 +62,7 @@ fn bench_decode_slice(bencher: Bencher, len: usize) {
     bencher
         .counter(len * 2)
         .with_inputs(|| (rand_hex_string(len * 2), vec![0u8; len]))
-        .bench_values(|(inp, mut buf)| {
-            let r = base16::decode_slice(&inp, &mut buf[..]);
-            divan::black_box(buf.as_mut_ptr());
-            r
-        });
+        .bench_refs(|(inp, buf)| base16::decode_slice(&inp, &mut buf[..]));
 }
 
 #[divan::bench(args = SIZES)]
@@ -82,11 +70,7 @@ fn bench_encode_slice(bencher: Bencher, len: usize) {
     bencher
         .counter(len)
         .with_inputs(|| (rand_enc_input(len), vec![0u8; len * 2]))
-        .bench_values(|((inp, c), mut buf)| {
-            let r = base16::encode_config_slice(&inp, c, &mut buf);
-            divan::black_box(buf.as_mut_ptr());
-            r
-        });
+        .bench_refs(|((inp, c), ref mut buf)| base16::encode_config_slice(&inp, *c, buf));
 }
 
 fn main() {
