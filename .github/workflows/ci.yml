@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test Rust ${{ matrix.rust }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rust: 1.56.0,           os: ubuntu-latest }
+          - { rust: stable,           os: ubuntu-latest }
+          - { rust: stable,           os: macos-latest }
+          - { rust: stable,           os: windows-latest }
+          - { rust: stable-i686-msvc, os: windows-latest }
+          - { rust: beta,             os: ubuntu-latest }
+          - { rust: nightly,          os: ubuntu-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
+        with:
+          rust-version: ${{ matrix.rust }}
+      - run: cargo test --verbose --workspace --no-default-features
+      - run: cargo test --verbose --workspace --no-default-features --features=alloc
+      - run: cargo test --verbose --workspace --all-features --all-targets
+
+  miri-test:
+    name: Test under miri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
+        with:
+          rust-version: nightly
+      - run: cargo miri test --verbose --workspace --no-default-features
+      - run: cargo miri test --verbose --workspace --no-default-features --features=alloc
+      - run: cargo miri test --verbose --workspace --all-features
+
+  fuzz:
+    name: Run fuzzers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
+        with:
+          rust-version: nightly
+      - run: cargo install cargo-fuzz
+
+      - name: Fuzz decode under asan
+        run: cargo +nightly fuzz run decode -- -rss_limit_mb=4096 -max_total_time=60
+        working-directory: fuzz
+      - name: Fuzz encode under asan
+        run: cargo +nightly fuzz run encode -- -rss_limit_mb=4096 -max_total_time=60
+        working-directory: fuzz
+
+      - name: Fuzz decode under msan
+        run: cargo +nightly fuzz run decode -s memory -- -rss_limit_mb=4096 -max_total_time=60
+        working-directory: fuzz
+      - name: Fuzz encode under msan
+        run: cargo +nightly fuzz run encode -s memory -- -rss_limit_mb=4096 -max_total_time=60
+        working-directory: fuzz
+
+  check:
+    name: Check warnings
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
+      - run: cargo check --workspace --all-targets --verbose
+      - run: cargo check --workspace --all-targets --verbose --no-default-features
+
+  rustfmt:
+    name: Verify code formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  codecov-tarpaulin:
+    name: coverage
+    runs-on: ubuntu-latest
+    container:
+      image: xd009642/tarpaulin:develop-nightly
+      options: --security-opt seccomp=unconfined
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo tarpaulin --verbose --doc --all-features --all-targets --engine llvm --out xml
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
