@@ -59,4 +59,4 @@ Both of these configurations are `no_std` compatible.
 
 # License
 
-Public domain, as explained [here](https://creativecommons.org/publicdomain/zero/1.0/legalcode)
+Public domain, as explained by [the Unlicense](./UNLICENSE). Alternatively, you can use either of the typical rusty MIT/Apache-2.0 combination.
