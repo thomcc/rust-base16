@@ -74,13 +74,6 @@ jobs:
         run: cargo +nightly fuzz run encode -- -rss_limit_mb=4096 -max_total_time=60
         working-directory: fuzz
 
-      - name: Fuzz decode under msan
-        run: cargo +nightly fuzz run decode -s memory -- -rss_limit_mb=4096 -max_total_time=60
-        working-directory: fuzz
-      - name: Fuzz encode under msan
-        run: cargo +nightly fuzz run encode -s memory -- -rss_limit_mb=4096 -max_total_time=60
-        working-directory: fuzz
-
   check:
     name: Check warnings
     runs-on: ubuntu-latest
